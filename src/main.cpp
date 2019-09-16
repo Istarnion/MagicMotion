@@ -12,7 +12,10 @@ int main(int num_args, char *args[])
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL |
+                                                     SDL_WINDOW_ALLOW_HIGHDPI |
+                                                     SDL_WINDOW_RESIZABLE |
+                                                     SDL_WINDOW_MAXIMIZED);
     SDL_Window *window = SDL_CreateWindow("Code",
                                           SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                           800, 600,

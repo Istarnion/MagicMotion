@@ -1,72 +1,138 @@
 #include <SDL.h>
 #include "ui.h"
+#include "renderer.cpp"
+#include "frustum.h"
+#include "files.cpp"
+#include "input.cpp"
+#include "camera.cpp"
+
+static void _UpdateProjectionMatrix(void);
 
 int main(int num_args, char *args[])
 {
-
     SDL_Init(SDL_INIT_EVERYTHING);
 
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    RendererInit("Code", 800, 600);
 
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL |
-                                                     SDL_WINDOW_ALLOW_HIGHDPI |
-                                                     SDL_WINDOW_RESIZABLE |
-                                                     SDL_WINDOW_MAXIMIZED);
-    SDL_Window *window = SDL_CreateWindow("Code",
-                                          SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                          800, 600,
-                                          window_flags);
-    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1);
+    Frustum f;
+    f.position = MakeV3(0, 5000, 0);
+    f.forward = MakeV3(0, -1, 0);
+    f.up = MakeV3(0, 0, 1);
+    f.fov = 60;
+    f.aspect = 1;
+    f.near_plane = 300;
+    f.far_plane = 5000;
 
-    load_gl_functions();
+    Camera cam;
+    cam.position = MakeV3(0, 500, 7500);
+    cam.forward = MakeV3(0, 0, 1);
+    cam.right = MakeV3(1, 0, 0);
+    cam.up = MakeV3(0, 1, 0);
+    cam.yaw = cam.pitch = 0;
+    //CameraLookAt(&cam, MakeV3(0, 2500, 0));
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-
-    ImGui::StyleColorsDark();
-
-    ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
-    ImGui_ImplOpenGL3_Init();
+    _UpdateProjectionMatrix();
 
     bool running = true;
     while(running)
     {
+        InputNewFrame();
         SDL_Event e;
         while(SDL_PollEvent(&e))
         {
             ImGui_ImplSDL2_ProcessEvent(&e);
-            if(e.type == SDL_QUIT)
+            ImGuiIO &io = ImGui::GetIO();
+
+            switch(e.type)
             {
-                running = false;
+                case SDL_QUIT:
+                    running = false;
+                    break;
+                case SDL_WINDOWEVENT:
+                    if(e.window.event == SDL_WINDOWEVENT_RESIZED ||
+                       e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
+                    {
+                        RendererUpdateSize();
+                        _UpdateProjectionMatrix();
+                    }
+                    break;
+                case SDL_KEYDOWN:
+                case SDL_KEYUP:
+                    if(!io.WantCaptureKeyboard)
+                    {
+                        InputKeyEvent(e.type == SDL_KEYDOWN, e.key.keysym.scancode);
+                    }
+                    break;
+                case SDL_MOUSEMOTION:
+                    if(!io.WantCaptureMouse)
+                    {
+                        int width, height;
+                        RendererGetSize(&width, &height);
+                        float w = 2.0f / width;
+                        float h = -2.0f / height;
+
+                        InputMouseMotion(e.motion.x * w - 1.0f,    e.motion.y * h - 1.0f,
+                                         e.motion.xrel * w - 1.0f, e.motion.yrel * h - 1.0f);
+                    }
+                    break;
+                case SDL_MOUSEBUTTONDOWN:
+                case SDL_MOUSEBUTTONUP:
+                    if(!io.WantCaptureMouse)
+                    {
+                        InputMousePress(e.type == SDL_MOUSEBUTTONDOWN, e.button.button);
+                    }
+                    break;
+                case SDL_MOUSEWHEEL:
+                    if(!io.WantCaptureMouse)
+                    {
+                        int scroll = e.wheel.y;
+                        InputMouseWheel(scroll);
+                    }
+                    break;
+                default:
+                    break;
             }
         }
 
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL2_NewFrame(window);
-        ImGui::NewFrame();
-        glClear(GL_COLOR_BUFFER_BIT);
+        RendererClear();
 
         ImGui::Text("Hello World!");
+        ImGui::InputFloat3("Camera position", (float *)&cam.position);
+        ImGui::InputFloat3("Camera forward", (float *)&cam.forward);
+        ImGui::InputFloat3("Camera right", (float *)&cam.right);
+        ImGui::InputFloat3("Camera up", (float *)&cam.up);
+        ImGui::InputFloat("Camera pitch", &cam.pitch);
+        ImGui::InputFloat("Camera yaw", &cam.yaw);
 
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        SDL_GL_SwapWindow(window);
+        //RotateCamera(&cam, Input()->mouse_delta.x, Input()->mouse_delta.y);
+
+        RendererSetViewMatrix(CameraGetViewMatrix(&cam));
+
+        // RenderFrustum(&f);
+
+        RenderCube(MakeV3(    0,  0,        0), MakeV3(100, 100, 100));
+        RenderCube(MakeV3(    0,  0,     5000), MakeV3(100, 100, 100));
+        RenderCube(MakeV3( 5000,  0,        0), MakeV3(100, 100, 100));
+        RenderCube(MakeV3(    0,  0,    -5000), MakeV3(100, 100, 100));
+        RenderCube(MakeV3(-5000,  0,        0), MakeV3(100, 100, 100));
+        RenderCube(MakeV3(0,      5000,     0), MakeV3(100, 100, 100));
+        RenderCube(MakeV3(0,     -5000,     0), MakeV3(100, 100, 100));
+
+        RendererDisplay();
     }
 
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
-    ImGui::DestroyContext();
-
-    SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;
+}
+
+static void
+_UpdateProjectionMatrix()
+{
+    int w, h;
+    RendererGetSize(&w, &h);
+    float aspect = (float)w / (float)h;
+
+    RendererSetProjectionMatrix(PerspectiveMat4(aspect, 45.0f, 10.0f, 20000.0f));
+    // RendererSetProjectionMatrix(OrthographicMat4(-1000, 1000, -1000*aspect, 1000*aspect, 100, 20000));
 }
 

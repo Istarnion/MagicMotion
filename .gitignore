@@ -1,4 +1,6 @@
 code
 bin/
 imgui.ini
+test.dSYM/
+code.dSYM/
 

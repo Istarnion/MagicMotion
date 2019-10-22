@@ -37,6 +37,8 @@ main(int num_args, char *args[])
     TEST(IsEqualV3(MakeV3(1, 2, 3), (V3){ 1, 2, 3 }));
     TEST(IsEqualV3(MakeNormalizedV3(2, 0, 0), (V3){ 1, 0, 0 }));
     TEST(IsEqualV3(NormalizeV3((V3){ 2, 0, 0 }), (V3){ 1, 0, 0 }));
+    TEST((MagnitudeSquaredV3(MakeV3(1, 2, 2)) == 9));
+    TEST((MagnitudeV3(MakeV3(1, 2, 2)) == 3));
     TEST(IsEqualV3(NegateV3((V3){ 2, 0, 0 }), (V3){ -2, 0, 0 }));
     TEST(IsEqualV3(AddV3((V3){ 1, 0, 0 }, (V3){ 0, 1, 0 }), (V3){ 1, 1, 0 }));
     TEST(IsEqualV3(SubV3((V3){ 1, 0, 0 }, (V3){ 1, 0, 0 }), (V3){ 0, 0, 0 }));
@@ -47,8 +49,15 @@ main(int num_args, char *args[])
     HEADER(Matrices);
     TEST(IsEqualMat4(MulMat4(IdentityMat4(), IdentityMat4()), IdentityMat4()));
     TEST(IsEqualV3(MulMat4Vec3(IdentityMat4(), (V3){ 1, 1, 1 }), (V3){ 1, 1, 1 }));
+    // Translation
     TEST(IsEqualV3(MulMat4Vec3(TranslationMat4((V3){ 2, 3, 4 }), (V3){ 1, 2, 3 }), (V3){ 3, 5, 7 }));
+    // Scale
     TEST(IsEqualV3(MulMat4Vec3(ScaleMat4((V3){ 2, 3, 6 }), (V3){ 1, 2, 3 }), (V3){ 2, 6, 18 }));
+
+    // Rotation
+    TEST(IsEqualV3((V3){ 0, 0, 1 }, MulMat4Vec3(RotateMat4(M_PI, 0, 0), (V3){ 0, 0, -1 })));
+    TEST(IsEqualV3((V3){ 1, 0, 0 }, MulMat4Vec3(RotateMat4(0, M_PI, 0), (V3){ -1, 0, 0 })));
+    TEST(IsEqualV3((V3){ 1, 0, 0 }, MulMat4Vec3(RotateMat4(0, 0, M_PI), (V3){ -1, 0, 0 })));
 
     V3 translate = MakeV3(1, 2, 3);
     V3 scale = MakeV3(2, 4, 6);
@@ -56,6 +65,7 @@ main(int num_args, char *args[])
     TEST(IsEqualMat4(MulMat4(TranslationMat4(translate), TranslationMat4(translate)), TranslationMat4(ScaleV3(translate, 2))));
     TEST(IsEqualMat4(TransformMat4(translate, scale, rotation), MulMat4(TranslationMat4(translate), ScaleMat4(scale))));
     TEST(IsEqualMat4(TransformMat4(translate, scale, rotation), MulMat4(ScaleMat4(scale), TranslationMat4(translate))));
+
 
     END();
     return 0;

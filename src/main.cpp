@@ -24,12 +24,10 @@ int main(int num_args, char *args[])
     f.far_plane = 5000;
 
     Camera cam;
-    cam.position = MakeV3(0, 500, 7500);
-    cam.forward = MakeV3(0, 0, 1);
-    cam.right = MakeV3(1, 0, 0);
-    cam.up = MakeV3(0, 1, 0);
-    cam.yaw = cam.pitch = 0;
-    //CameraLookAt(&cam, MakeV3(0, 2500, 0));
+    cam.pitch = 0;
+    cam.yaw = M_PI;
+    cam.position = MakeV3(0, 1000, 7500);
+    CameraLookAt(&cam, MakeV3(0, 0, 0));
 
     _UpdateProjectionMatrix();
 
@@ -72,7 +70,8 @@ int main(int num_args, char *args[])
                         float h = -2.0f / height;
 
                         InputMouseMotion(e.motion.x * w - 1.0f,    e.motion.y * h - 1.0f,
-                                         e.motion.xrel * w - 1.0f, e.motion.yrel * h - 1.0f);
+                                         e.motion.xrel / (float)width,
+                                         e.motion.yrel / (float)height);
                     }
                     break;
                 case SDL_MOUSEBUTTONDOWN:
@@ -96,19 +95,39 @@ int main(int num_args, char *args[])
 
         RendererClear();
 
-        ImGui::Text("Hello World!");
+        ImGui::Begin("Camera controll");
         ImGui::InputFloat3("Camera position", (float *)&cam.position);
-        ImGui::InputFloat3("Camera forward", (float *)&cam.forward);
-        ImGui::InputFloat3("Camera right", (float *)&cam.right);
-        ImGui::InputFloat3("Camera up", (float *)&cam.up);
         ImGui::InputFloat("Camera pitch", &cam.pitch);
         ImGui::InputFloat("Camera yaw", &cam.yaw);
+        ImGui::End();
 
-        //RotateCamera(&cam, Input()->mouse_delta.x, Input()->mouse_delta.y);
+        InputState *input = Input();
+
+        V3 camera_movement = MakeV3(0, 0, 0);
+        camera_movement.x = (!!(bool)input->right) - (!!(bool)input->left);
+        camera_movement.y = (!!(bool)input->up) - (!!(bool)input->down);
+        camera_movement.z = (!!(bool)input->forward) - (!!(bool)input->back);
+
+        if(MagnitudeSquaredV3(camera_movement) > 0)
+        {
+            camera_movement = ScaleV3(NormalizeV3(camera_movement), 100);
+            MoveCamera(&cam, camera_movement);
+        }
+
+        if(input->left_mouse_button)
+        {
+            SDL_SetRelativeMouseMode(SDL_TRUE);
+            RotateCamera(&cam, Input()->mouse_delta.x, Input()->mouse_delta.y);
+        }
+        else
+        {
+            SDL_SetRelativeMouseMode(SDL_FALSE);
+        }
 
         RendererSetViewMatrix(CameraGetViewMatrix(&cam));
 
-        // RenderFrustum(&f);
+
+        RenderFrustum(&f);
 
         RenderCube(MakeV3(    0,  0,        0), MakeV3(100, 100, 100));
         RenderCube(MakeV3(    0,  0,     5000), MakeV3(100, 100, 100));

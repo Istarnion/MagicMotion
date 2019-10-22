@@ -6,10 +6,13 @@
 #define RADIANS(d) ((d) * (M_PI / 180))
 #define DEGREES(r) ((r) * (180 / M_PI))
 
+#define EPSILON 0.0001f
+#define EQUAL_FLOAT(a, b) (fabs((a) - (b)) < EPSILON)
+
 float
 Clamp(float x, float min, float max)
 {
-    float result;
+    float result = x;
     if(x <= min) result = min;
     else if(x >= max) result = max;
     return result;
@@ -35,7 +38,9 @@ MakeV3(float x, float y, float z)
 bool
 IsEqualV3(V3 a, V3 b)
 {
-    return (a.x == b.x && a.y == b.y && a.z == b.z);
+    return (EQUAL_FLOAT(a.x, b.x) &&
+            EQUAL_FLOAT(a.y, b.y) &&
+            EQUAL_FLOAT(a.z, b.z));
 }
 
 V3
@@ -68,6 +73,18 @@ NormalizeV3(V3 v)
     }
 
     return result;
+}
+
+float
+MagnitudeV3(V3 v)
+{
+    return sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+}
+
+float
+MagnitudeSquaredV3(V3 v)
+{
+    return v.x*v.x + v.y*v.y + v.z*v.z;
 }
 
 V3
@@ -161,6 +178,40 @@ IsEqualMat4(Mat4 a, Mat4 b)
 }
 
 Mat4
+MulMat4(Mat4 a, Mat4 b)
+{
+    Mat4 result;
+    result.f00 = a.f00*b.f00 + a.f01*b.f10 + a.f02*b.f20 + a.f03*b.f30;
+    result.f01 = a.f00*b.f01 + a.f01*b.f11 + a.f02*b.f21 + a.f03*b.f31;
+    result.f02 = a.f00*b.f02 + a.f01*b.f12 + a.f02*b.f22 + a.f03*b.f32;
+    result.f03 = a.f00*b.f03 + a.f01*b.f13 + a.f02*b.f23 + a.f03*b.f33;
+    result.f10 = a.f10*b.f00 + a.f11*b.f10 + a.f12*b.f20 + a.f13*b.f30;
+    result.f11 = a.f10*b.f01 + a.f11*b.f11 + a.f12*b.f21 + a.f13*b.f31;
+    result.f12 = a.f10*b.f02 + a.f11*b.f12 + a.f12*b.f22 + a.f13*b.f32;
+    result.f13 = a.f10*b.f03 + a.f11*b.f13 + a.f12*b.f23 + a.f13*b.f33;
+    result.f20 = a.f20*b.f00 + a.f21*b.f10 + a.f22*b.f20 + a.f23*b.f30;
+    result.f21 = a.f20*b.f01 + a.f21*b.f11 + a.f22*b.f21 + a.f23*b.f31;
+    result.f22 = a.f20*b.f02 + a.f21*b.f12 + a.f22*b.f22 + a.f23*b.f32;
+    result.f23 = a.f20*b.f03 + a.f21*b.f13 + a.f22*b.f23 + a.f23*b.f33;
+    result.f30 = a.f30*b.f00 + a.f31*b.f10 + a.f32*b.f20 + a.f33*b.f30;
+    result.f31 = a.f30*b.f01 + a.f31*b.f11 + a.f32*b.f21 + a.f33*b.f31;
+    result.f32 = a.f30*b.f02 + a.f31*b.f12 + a.f32*b.f22 + a.f33*b.f32;
+    result.f33 = a.f30*b.f03 + a.f31*b.f13 + a.f32*b.f23 + a.f33*b.f33;
+    return result;
+}
+
+V3
+MulMat4Vec3(Mat4 m, V3 v)
+{
+    // This function assumes a fouth component to v as v.w = 1.0
+    V3 result;
+    result.x = m.f00*v.x + m.f10*v.y + m.f20*v.z + m.f30;
+    result.y = m.f01*v.x + m.f11*v.y + m.f21*v.z + m.f31;
+    result.z = m.f02*v.x + m.f12*v.y + m.f22*v.z + m.f32;
+    return result;
+}
+
+Mat4
 IdentityMat4()
 {
     Mat4 result;
@@ -220,20 +271,19 @@ LookAtMat4(V3 eye, V3 target, V3 up)
     V3 right = NormalizeV3(CrossV3(forward, up));
     V3 actual_up = NormalizeV3(CrossV3(right, forward));
 
+    result = IdentityMat4();
     result.f00 = right.x;
     result.f10 = right.y;
     result.f20 = right.z;
-    result.f30 = -DotV3(right, eye);
-    result.f01 = up.x;
-    result.f11 = up.y;
-    result.f21 = up.z;
-    result.f31 = -DotV3(up, eye);
-    result.f02 = -forward.x;
-    result.f12 = -forward.y;
-    result.f22 = -forward.z;
+    result.f01 = actual_up.x;
+    result.f11 = actual_up.y;
+    result.f21 = actual_up.z;
+    result.f02 =-forward.x;
+    result.f12 =-forward.y;
+    result.f22 =-forward.z;
+    result.f30 =-DotV3(right, eye);
+    result.f31 =-DotV3(actual_up, eye);
     result.f32 = DotV3(forward, eye);
-    result.f03 = result.f13 = result.f23 = 0.0f;
-    result.f33 = 1.0f;
 
     return result;
 }
@@ -269,9 +319,68 @@ ScaleMat4(V3 v)
 }
 
 Mat4
+RotateMat4(float pitch, float yaw, float roll)
+{
+
+    /*
+     * 2D rotation:
+     * c -s
+     * s  c
+     *
+     * x-rotation:
+     *   0   0   0
+     *   0  cx -sx
+     *   0  sx  cx
+     *
+     * y-rotation
+     *   cy  0  sy
+     *    0  0   0
+     *  -sy  0  cy
+     *
+     * z-rotation
+     *  cz -sz   0
+     *  sz  cz   0
+     *   0   0   0
+     */
+
+    float cx = cos(pitch);
+    float sx = sin(pitch);
+    float cy = cos(yaw);
+    float sy = sin(yaw);
+    float cz = cos(roll);
+    float sz = sin(roll);
+
+    // TODO(istarnion): Inline this!
+    Mat4 x = {.v = {
+          1,   0,   0, 0,
+          0,  cx, -sx, 0,
+          0,  sx,  cx, 0,
+          0,   0,   0, 1
+    }};
+
+    Mat4 y = {.v = {
+         cy,   0,  sy, 0,
+          0,   1,   0, 0,
+        -sy,   0,  cy, 0,
+          0,   0,   0, 1
+    }};
+
+    Mat4 z = {.v = {
+         cz, -sz,   0, 0,
+         sz,  cz,   0, 0,
+          0,   0,   1, 0,
+          0,   0,   0, 1
+    }};
+
+    Mat4 result = MulMat4(MulMat4(y, x), z);
+    return result;
+}
+
+Mat4
 TransformMat4(V3 pos, V3 scale, V3 euler)
 {
     // TODO(istarnion): Handle euler
+    // order: Scale, rotation, translation
     Mat4 result;
     result.f00 = scale.x;
     result.f11 = scale.y;
@@ -287,39 +396,6 @@ TransformMat4(V3 pos, V3 scale, V3 euler)
     return result;
 }
 
-Mat4
-MulMat4(Mat4 a, Mat4 b)
-{
-    Mat4 result;
-    result.f00 = a.f00*b.f00 + a.f01*b.f10 + a.f02*b.f20 + a.f03*b.f30;
-    result.f01 = a.f00*b.f01 + a.f01*b.f11 + a.f02*b.f21 + a.f03*b.f31;
-    result.f02 = a.f00*b.f02 + a.f01*b.f12 + a.f02*b.f22 + a.f03*b.f32;
-    result.f03 = a.f00*b.f03 + a.f01*b.f13 + a.f02*b.f23 + a.f03*b.f33;
-    result.f10 = a.f10*b.f00 + a.f11*b.f10 + a.f12*b.f20 + a.f13*b.f30;
-    result.f11 = a.f10*b.f01 + a.f11*b.f11 + a.f12*b.f21 + a.f13*b.f31;
-    result.f12 = a.f10*b.f02 + a.f11*b.f12 + a.f12*b.f22 + a.f13*b.f32;
-    result.f13 = a.f10*b.f03 + a.f11*b.f13 + a.f12*b.f23 + a.f13*b.f33;
-    result.f20 = a.f20*b.f00 + a.f21*b.f10 + a.f22*b.f20 + a.f23*b.f30;
-    result.f21 = a.f20*b.f01 + a.f21*b.f11 + a.f22*b.f21 + a.f23*b.f31;
-    result.f22 = a.f20*b.f02 + a.f21*b.f12 + a.f22*b.f22 + a.f23*b.f32;
-    result.f23 = a.f20*b.f03 + a.f21*b.f13 + a.f22*b.f23 + a.f23*b.f33;
-    result.f30 = a.f30*b.f00 + a.f31*b.f10 + a.f32*b.f20 + a.f33*b.f30;
-    result.f31 = a.f30*b.f01 + a.f31*b.f11 + a.f32*b.f21 + a.f33*b.f31;
-    result.f32 = a.f30*b.f02 + a.f31*b.f12 + a.f32*b.f22 + a.f33*b.f32;
-    result.f33 = a.f30*b.f03 + a.f31*b.f13 + a.f32*b.f23 + a.f33*b.f33;
-    return result;
-}
-
-V3
-MulMat4Vec3(Mat4 m, V3 v)
-{
-    // This function assumes a fouth component to v as v.w = 1.0
-    V3 result;
-    result.x = m.f00*v.x + m.f10*v.y + m.f20*v.z + m.f30;
-    result.y = m.f01*v.x + m.f11*v.y + m.f21*v.z + m.f31;
-    result.z = m.f02*v.x + m.f12*v.y + m.f22*v.z + m.f32;
-    return result;
-}
 
 #endif /* end of include guard: MAGIC_MATH_H_ */
 

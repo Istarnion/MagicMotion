@@ -70,16 +70,17 @@ InputMousePress(bool button_down, int button)
     ButtonState state = (button_down ? PRESSED : RELEASED);
     switch(button)
     {
-        case 0:
+        case 1:
             current_state.left_mouse_button = state;
             break;
-        case 1:
+        case 2:
             current_state.middle_mouse_button = state;
             break;
-        case 2:
+        case 3:
             current_state.right_mouse_button = state;
             break;
         default:
+            fprintf(stderr, "Unsupported butten pressed: %d\n", button);
             break;
     }
 }

@@ -11,15 +11,12 @@
 typedef struct
 {
     V3 position;
-    V3 forward;
-    V3 right;
-    V3 up;
-    float pitch;
-    float yaw;
+    float pitch, yaw;
 } Camera;
 
 Mat4 CameraGetViewMatrix();
 
+V3 CameraForward(Camera *cam);
 void MoveCamera(Camera *cam, V3 v); // Move relative to the cameras local space
 void RotateCamera(Camera *cam, float yaw, float pitch);
 void CameraLookAt(Camera *cam, V3 target);

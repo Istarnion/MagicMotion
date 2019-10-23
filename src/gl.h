@@ -1546,6 +1546,7 @@ typedef float GLclampf;
     GLE(void,       EnableVertexAttribArray,    GLuint index) \
     GLE(void,       VertexAttribPointer,        GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer) \
     GLE(void,       DrawElements,               GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) \
+    GLE(void,       DrawElementsInstanced,      GLenum mode, GLsizei count, GLenum type, const GLvoid *indices, GLsizei primcount) \
     GLE(void,       DrawArrays,                 GLenum mode, GLint first, GLsizei count) \
     GLE(void,       DrawElementsBaseVertex,     GLenum mode, GLsizei count, GLenum type, GLvoid *indices, GLint basevertex)
 // End of OpenGL functions

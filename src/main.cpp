@@ -5,28 +5,29 @@
 #include "files.cpp"
 #include "input.cpp"
 #include "camera.cpp"
+#include "sensor_interface.cpp"
 
 static void _UpdateProjectionMatrix(void);
 
 int main(int num_args, char *args[])
 {
     SDL_Init(SDL_INIT_EVERYTHING);
+    SensorInitialize();
 
     RendererInit("Code", 800, 600);
 
     Frustum f;
     f.position = MakeV3(0, 0, 0);
-    f.pitch = RADIANS(90);
-    f.yaw = f.roll = 0;
-    f.fov = RADIANS(60);
-    f.aspect = 1;
+    f.pitch = f.yaw = f.roll = 0;
+    f.fov = GetSensorFOV();
+    f.aspect = GetSensorAspectRatio();
     f.near_plane = 300;
     f.far_plane = 5000;
 
     Camera cam;
     cam.pitch = 0;
-    cam.yaw = M_PI;
-    cam.position = MakeV3(0, 1000, 7500);
+    cam.yaw = 0;
+    cam.position = MakeV3(0, 0, 0);
     CameraLookAt(&cam, MakeV3(0, 0, 0));
 
     _UpdateProjectionMatrix();
@@ -99,9 +100,9 @@ int main(int num_args, char *args[])
         ImGui::InputFloat3("Camera position", (float *)&cam.position);
         ImGui::InputFloat("Camera pitch", &cam.pitch);
         ImGui::InputFloat("Camera yaw", &cam.yaw);
-        ImGui::InputFloat("Frustim pitch", &f.pitch);
-        ImGui::InputFloat("Frustim yaw", &f.yaw);
-        ImGui::InputFloat("Frustim roll", &f.roll);
+        ImGui::SliderFloat("Frustum pitch", &f.pitch, 0, 2.0f*M_PI);
+        ImGui::SliderFloat("Frustum yaw", &f.yaw, 0, 2.0f*M_PI);
+        ImGui::SliderFloat("Frustum roll", &f.roll, 0, 2.0f*M_PI);
         ImGui::End();
 
         InputState *input = Input();
@@ -129,20 +130,32 @@ int main(int num_args, char *args[])
 
         RendererSetViewMatrix(CameraGetViewMatrix(&cam));
 
-
         RenderFrustum(&f);
 
-        // RenderCube(MakeV3(    0,  0,        0), MakeV3(100, 100, 100));
-        RenderCube(MakeV3(    0,  0,     5000), MakeV3(100, 100, 100));
-        RenderCube(MakeV3( 5000,  0,        0), MakeV3(100, 100, 100));
-        RenderCube(MakeV3(    0,  0,    -5000), MakeV3(100, 100, 100));
-        RenderCube(MakeV3(-5000,  0,        0), MakeV3(100, 100, 100));
-        RenderCube(MakeV3(0,      5000,     0), MakeV3(100, 100, 100));
-        RenderCube(MakeV3(0,     -5000,     0), MakeV3(100, 100, 100));
+        Frame frame = GetSensorFrame(false, false);
+        const size_t half_width = frame.width/2;
+        const size_t half_height = frame.height/2;
+        V3 points[frame.width * frame.height];
+        size_t num_points = 0;
+        for(size_t y=0; y<frame.height; ++y)
+        for(size_t x=0; x<frame.width; ++x)
+        {
+            float depth = frame.pixels[x+y*frame.width].depth;
+            if(depth > 0.0f)
+            {
+                float pos_x = tanf((((float)x / (float)frame.width)-0.5f)*f.fov) * depth;
+                float pos_y = tanf((0.5f-((float)y / (float)frame.height))*(f.fov/f.aspect)) * depth;
+                points[num_points++] = (V3){ pos_x, pos_y, depth };
+            }
+        }
+
+        RenderCubes(points, num_points, f.position, (V3){ f.pitch, f.yaw, f.roll });
 
         RendererDisplay();
     }
 
+    RendererQuit();
+    SensorFinalize();
     SDL_Quit();
     return 0;
 }
@@ -155,6 +168,5 @@ _UpdateProjectionMatrix()
     float aspect = (float)w / (float)h;
 
     RendererSetProjectionMatrix(PerspectiveMat4(aspect, 45.0f, 10.0f, 100000.0f));
-    // RendererSetProjectionMatrix(OrthographicMat4(-1000, 1000, -1000*aspect, 1000*aspect, 100, 20000));
 }
 

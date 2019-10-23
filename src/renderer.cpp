@@ -16,6 +16,13 @@ typedef struct
     GLint mvp_loc;
 } RenderData;
 
+typedef struct
+{
+    GLuint shader;
+    GLint mvp_loc;
+    GLint positions_loc;
+} RenderInstancedData;
+
 static SDL_Window *window;
 static SDL_GLContext gl_context;
 static int width;
@@ -26,6 +33,7 @@ static Mat4 projection_view_matrix;
 
 static RenderData frustum_data;
 static RenderData cube_data;
+static RenderInstancedData cube_instanced_data;
 
 static GLuint _CreateShaderProgram(const char *source_file);
 static void _DeleteRenderData(RenderData *data);
@@ -159,6 +167,10 @@ RendererInit(const char *title, int width, int height)
 
         cube_data.shader = _CreateShaderProgram("shaders/cube.glsl");
         cube_data.mvp_loc = glGetUniformLocation(cube_data.shader, "MVP");
+
+        cube_instanced_data.shader = _CreateShaderProgram("shaders/instanced_cubes.glsl");
+        cube_instanced_data.mvp_loc = glGetUniformLocation(cube_instanced_data.shader, "MVP");
+        cube_instanced_data.positions_loc = glGetUniformLocation(cube_instanced_data.shader, "Positions");
     }
 }
 
@@ -167,6 +179,8 @@ RendererQuit(void)
 {
     _DeleteRenderData(&frustum_data);
     _DeleteRenderData(&cube_data);
+
+    glDeleteProgram(cube_instanced_data.shader);
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
@@ -228,8 +242,6 @@ RenderCube(V3 center, V3 size)
     Mat4 model_matrix = TransformMat4(center, size, MakeV3(0, 0, 0));
     Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
 
-    glEnable(GL_CULL_FACE);
-
     glBindVertexArray(cube_data.vertex_array);
     glUseProgram(cube_data.shader);
     glUniformMatrix4fv(cube_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
@@ -238,12 +250,30 @@ RenderCube(V3 center, V3 size)
 }
 
 void
+RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation)
+{
+    glBindVertexArray(cube_data.vertex_array);
+    glUseProgram(cube_instanced_data.shader);
+
+    Mat4 model_matrix = TransformMat4(offset, (V3){ 1, 1, 1 }, rotation);
+    Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
+    glUniformMatrix4fv(cube_instanced_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
+
+    for(size_t i=0; i<num_cubes; i+=512)
+    {
+        int num_cubes_to_draw = MIN(512, num_cubes-i);
+        glUniform3fv(cube_instanced_data.positions_loc, num_cubes_to_draw, (GLfloat *)(centers+i));
+        glDrawElementsInstanced(GL_TRIANGLES, 6*6, GL_UNSIGNED_SHORT, NULL, num_cubes_to_draw);
+    }
+}
+
+void
 RenderFrustum(const Frustum *frustum)
 {
     float near = frustum->near_plane;
     float far = frustum->far_plane;
     float halfFovTanX = tanf(frustum->fov/2.0f);
-    float halfFovTanY = tanf((frustum->fov * frustum->aspect)/2.0f);
+    float halfFovTanY = tanf((frustum->fov / frustum->aspect)/2.0f);
     V3 vn = MakeV3(near * halfFovTanX,
                    near * halfFovTanY,
                    near);

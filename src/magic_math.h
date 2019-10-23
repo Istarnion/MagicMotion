@@ -9,6 +9,10 @@
 #define EPSILON 0.001f
 #define EQUAL_FLOAT(a, b) (fabs((a) - (b)) < EPSILON)
 
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
+
 float
 Clamp(float x, float min, float max)
 {

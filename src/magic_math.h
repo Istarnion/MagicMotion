@@ -3,10 +3,10 @@
 
 #include <math.h>
 
-#define RADIANS(d) ((d) * (M_PI / 180))
-#define DEGREES(r) ((r) * (180 / M_PI))
+#define RADIANS(d) ((float)(d) * (M_PI / 180.0f))
+#define DEGREES(r) ((float)(r) * (180.0f / M_PI))
 
-#define EPSILON 0.0001f
+#define EPSILON 0.001f
 #define EQUAL_FLOAT(a, b) (fabs((a) - (b)) < EPSILON)
 
 float
@@ -379,20 +379,13 @@ RotateMat4(float pitch, float yaw, float roll)
 Mat4
 TransformMat4(V3 pos, V3 scale, V3 euler)
 {
-    // TODO(istarnion): Handle euler
-    // order: Scale, rotation, translation
-    Mat4 result;
-    result.f00 = scale.x;
-    result.f11 = scale.y;
-    result.f22 = scale.z;
-    result.f33 = 1.0f;
-    result.f01 = result.f02 = result.f03 = 0.0f;
-    result.f10 = result.f12 = result.f13 = 0.0f;
-    result.f20 = result.f21 = result.f23 = 0.0f;
-    result.f30 = pos.x;
-    result.f31 = pos.y;
-    result.f32 = pos.z;
+    Mat4 t = TranslationMat4(pos);
+    Mat4 s = ScaleMat4(scale);
+    Mat4 r = RotateMat4(euler.x, euler.y, euler.z);
 
+    // order: Scale, rotation, translation
+    // TODO(istarnion): Inline this!
+    Mat4 result = MulMat4(MulMat4(s, r), t);
     return result;
 }
 

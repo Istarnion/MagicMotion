@@ -84,12 +84,9 @@ RendererInit(const char *title, int width, int height)
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, frustum_data.element_buffer);
 
         static const GLushort indices[] = {
-            0, 1, 2, 0, 2, 3, // Near face
-            0, 3, 4, 4, 3, 7, // Top face
-            3, 2, 7, 7, 2, 6, // East face
-            1, 5, 2, 2, 5, 6, // Down face
-            4, 5, 0, 0, 5, 6, // West face
-            4, 6, 5, 4, 7, 6  // Far face
+            0, 1, 2, 3, 0,
+            4, 5, 6, 7, 4,
+            5, 1, 2, 6, 7, 3
         };
 
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
@@ -245,38 +242,42 @@ RenderFrustum(const Frustum *frustum)
 {
     float near = frustum->near_plane;
     float far = frustum->far_plane;
-    float length_scale = far / near;
-    V3 v = MakeNormalizedV3(near * tan(frustum->fov),
-                            near * tan(frustum->fov * frustum->aspect),
-                            near);
+    float halfFovTanX = tanf(frustum->fov/2.0f);
+    float halfFovTanY = tanf((frustum->fov * frustum->aspect)/2.0f);
+    V3 vn = MakeV3(near * halfFovTanX,
+                   near * halfFovTanY,
+                   near);
+    V3 vf = MakeV3(far * halfFovTanX,
+                   far * halfFovTanY,
+                   far);
 
     V3 vertices[] = {
         // Near plane
-        { -v.x,  v.y, v.z },
-        { -v.x, -v.y, v.z },
-        {  v.x, -v.y, v.z },
-        {  v.x,  v.y, v.z },
+        { -vn.x,  vn.y, vn.z },
+        { -vn.x, -vn.y, vn.z },
+        {  vn.x, -vn.y, vn.z },
+        {  vn.x,  vn.y, vn.z },
 
         // Far plane
-        { -v.x * length_scale,  v.y * length_scale, v.z * length_scale },
-        { -v.x * length_scale, -v.y * length_scale, v.z * length_scale },
-        {  v.x * length_scale, -v.y * length_scale, v.z * length_scale },
-        {  v.x * length_scale,  v.y * length_scale, v.z * length_scale }
+        { -vf.x,  vf.y, vf.z },
+        { -vf.x, -vf.y, vf.z },
+        {  vf.x, -vf.y, vf.z },
+        {  vf.x,  vf.y, vf.z }
     };
 
-    Mat4 model_matrix = TranslationMat4(frustum->position);
-    Mat4 mvp = MulMat4(projection_view_matrix, model_matrix);
+    Mat4 model_matrix = TransformMat4(frustum->position,
+                                      (V3){ 1, 1, 1 },
+                                      (V3){ frustum->pitch, frustum->yaw, frustum->roll });
+    Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
 
-    glDisable(GL_CULL_FACE);
-
-    glBindVertexArray(frustum_data.vertex_array);
     glBindBuffer(GL_ARRAY_BUFFER, frustum_data.vertex_buffer);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
 
+    glBindVertexArray(frustum_data.vertex_array);
     glUseProgram(frustum_data.shader);
     glUniformMatrix4fv(frustum_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
 
-    glDrawElements(GL_TRIANGLES, 6*6, GL_UNSIGNED_SHORT, NULL);
+    glDrawElements(GL_LINE_STRIP, 6*6, GL_UNSIGNED_SHORT, NULL);
 }
 
 static GLint

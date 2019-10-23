@@ -6,8 +6,7 @@
 typedef struct
 {
     V3 position;
-    V3 forward;
-    V3 up;
+    float pitch, yaw, roll;
     float fov;
     float aspect;
     float near_plane;

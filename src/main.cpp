@@ -15,10 +15,10 @@ int main(int num_args, char *args[])
     RendererInit("Code", 800, 600);
 
     Frustum f;
-    f.position = MakeV3(0, 5000, 0);
-    f.forward = MakeV3(0, -1, 0);
-    f.up = MakeV3(0, 0, 1);
-    f.fov = 60;
+    f.position = MakeV3(0, 0, 0);
+    f.pitch = RADIANS(90);
+    f.yaw = f.roll = 0;
+    f.fov = RADIANS(60);
     f.aspect = 1;
     f.near_plane = 300;
     f.far_plane = 5000;
@@ -99,6 +99,9 @@ int main(int num_args, char *args[])
         ImGui::InputFloat3("Camera position", (float *)&cam.position);
         ImGui::InputFloat("Camera pitch", &cam.pitch);
         ImGui::InputFloat("Camera yaw", &cam.yaw);
+        ImGui::InputFloat("Frustim pitch", &f.pitch);
+        ImGui::InputFloat("Frustim yaw", &f.yaw);
+        ImGui::InputFloat("Frustim roll", &f.roll);
         ImGui::End();
 
         InputState *input = Input();
@@ -117,7 +120,7 @@ int main(int num_args, char *args[])
         if(input->left_mouse_button)
         {
             SDL_SetRelativeMouseMode(SDL_TRUE);
-            RotateCamera(&cam, Input()->mouse_delta.x, Input()->mouse_delta.y);
+            RotateCamera(&cam, -Input()->mouse_delta.x, Input()->mouse_delta.y);
         }
         else
         {
@@ -129,7 +132,7 @@ int main(int num_args, char *args[])
 
         RenderFrustum(&f);
 
-        RenderCube(MakeV3(    0,  0,        0), MakeV3(100, 100, 100));
+        // RenderCube(MakeV3(    0,  0,        0), MakeV3(100, 100, 100));
         RenderCube(MakeV3(    0,  0,     5000), MakeV3(100, 100, 100));
         RenderCube(MakeV3( 5000,  0,        0), MakeV3(100, 100, 100));
         RenderCube(MakeV3(    0,  0,    -5000), MakeV3(100, 100, 100));
@@ -151,7 +154,7 @@ _UpdateProjectionMatrix()
     RendererGetSize(&w, &h);
     float aspect = (float)w / (float)h;
 
-    RendererSetProjectionMatrix(PerspectiveMat4(aspect, 45.0f, 10.0f, 20000.0f));
+    RendererSetProjectionMatrix(PerspectiveMat4(aspect, 45.0f, 10.0f, 100000.0f));
     // RendererSetProjectionMatrix(OrthographicMat4(-1000, 1000, -1000*aspect, 1000*aspect, 100, 20000));
 }
 

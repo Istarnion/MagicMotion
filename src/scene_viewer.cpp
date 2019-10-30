@@ -4,6 +4,7 @@
 #include "sensor_interface.h"
 #include "renderer.h"
 #include "ui.h"
+#include "sensor_serialization.h"
 
 typedef struct
 {
@@ -49,6 +50,9 @@ ViewerSceneInit(void)
     // OpenNI2. This means the number of sensors will
     // be fixed at startup.
 
+    SerializedSensor serialized_sensors[MAX_SENSORS];
+    int num_serialized_sensors = LoadSensors(serialized_sensors, MAX_SENSORS);
+
     num_active_sensors = PollSensorList(sensor_list, MAX_SENSORS);
     for(int i=0; i<num_active_sensors; ++i)
     {
@@ -74,6 +78,24 @@ ViewerSceneInit(void)
 
         active_sensors[i].point_cloud = (V3 *)calloc(sensor->depth_stream_info.width * sensor->depth_stream_info.height,
                                                      sizeof(V3));
+
+        for(int j=0; j<num_serialized_sensors; ++j)
+        {
+            if(strcmp(sensor->URI, serialized_sensors[j].URI) == 0)
+            {
+                printf("Loading data for URI %s\n", sensor->URI);
+                active_sensors[i].frustum.position   = serialized_sensors[j].frustum.position;
+                active_sensors[i].frustum.pitch      = serialized_sensors[j].frustum.pitch;
+                active_sensors[i].frustum.yaw        = serialized_sensors[j].frustum.yaw;
+                active_sensors[i].frustum.roll       = serialized_sensors[j].frustum.roll;
+                break;
+            }
+        }
+    }
+
+    for(int i=0; i<num_serialized_sensors; ++i)
+    {
+        free(serialized_sensors[i].URI);
     }
 
     return true;
@@ -166,6 +188,7 @@ ViewerSceneEnd(void)
 {
     for(int i=0; i<num_active_sensors; ++i)
     {
+        SaveSensor(active_sensors[i].sensor->URI, &active_sensors[i].frustum);
         SensorFinalize(active_sensors[i].sensor);
         free(active_sensors[i].point_cloud);
     }

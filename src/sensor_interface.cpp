@@ -120,6 +120,10 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
         s->color_frame = (ColorPixel *)calloc(sensor->color_stream_info.width * sensor->color_stream_info.height,
                                               sizeof(ColorPixel));
     }
+    else
+    {
+        s->color_frame = NULL;
+    }
 
     if(enable_depth)
     {
@@ -159,6 +163,10 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
 
         s->depth_frame = (DepthPixel *)calloc(sensor->depth_stream_info.width * sensor->depth_stream_info.height,
                                               sizeof(DepthPixel));
+    }
+    else
+    {
+        s->depth_frame = NULL;
     }
 
     return 0;

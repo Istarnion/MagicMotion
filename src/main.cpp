@@ -6,6 +6,7 @@
 #include "camera.cpp"
 #include "sensor_interface.cpp"
 #include "scene_viewer.cpp"
+#include "sensor_serialization.cpp"
 
 int main(int num_args, char *args[])
 {

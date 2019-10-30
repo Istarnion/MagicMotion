@@ -21,6 +21,7 @@ typedef struct
     GLuint shader;
     GLint mvp_loc;
     GLint positions_loc;
+    GLint color_loc;
 } RenderInstancedData;
 
 static SDL_Window *window;
@@ -171,6 +172,7 @@ RendererInit(const char *title, int width, int height)
         cube_instanced_data.shader = _CreateShaderProgram("shaders/instanced_cubes.glsl");
         cube_instanced_data.mvp_loc = glGetUniformLocation(cube_instanced_data.shader, "MVP");
         cube_instanced_data.positions_loc = glGetUniformLocation(cube_instanced_data.shader, "Positions");
+        cube_instanced_data.color_loc = glGetUniformLocation(cube_instanced_data.shader, "Color");
     }
 }
 
@@ -250,7 +252,7 @@ RenderCube(V3 center, V3 size)
 }
 
 void
-RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation)
+RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation, V3 color)
 {
     glBindVertexArray(cube_data.vertex_array);
     glUseProgram(cube_instanced_data.shader);
@@ -258,6 +260,7 @@ RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation)
     Mat4 model_matrix = TransformMat4(offset, (V3){ 1, 1, 1 }, rotation);
     Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
     glUniformMatrix4fv(cube_instanced_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
+    glUniform3fv(cube_instanced_data.color_loc, 1, (float *)&color);
 
     for(size_t i=0; i<num_cubes; i+=512)
     {

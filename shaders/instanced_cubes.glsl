@@ -18,6 +18,8 @@ main()
 
 #else
 
+uniform vec3 Color;
+
 in vec3 normal;
 
 out vec4 color;
@@ -25,7 +27,7 @@ out vec4 color;
 void
 main()
 {
-    color = vec4(1.0, 1.0, 1.0, 1.0);
+    color = vec4(Color, 1.0);
 }
 
 #endif

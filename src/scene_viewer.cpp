@@ -10,6 +10,7 @@ typedef struct
 {
     SensorInfo *sensor;
     Frustum frustum;
+    bool colorize;
     V3 *point_cloud;
 } SensorRenderData;
 
@@ -79,6 +80,8 @@ ViewerSceneInit(void)
         active_sensors[i].point_cloud = (V3 *)calloc(sensor->depth_stream_info.width * sensor->depth_stream_info.height,
                                                      sizeof(V3));
 
+        active_sensors[i].colorize = false;
+
         for(int j=0; j<num_serialized_sensors; ++j)
         {
             if(strcmp(sensor->URI, serialized_sensors[j].URI) == 0)
@@ -119,6 +122,7 @@ ViewerSceneUpdate(void)
                 ImGui::SliderFloat("Pitch", &s->frustum.pitch, 0, 2.0f*M_PI);
                 ImGui::SliderFloat("Yaw", &s->frustum.yaw, 0, 2.0f*M_PI);
                 ImGui::SliderFloat("Roll", &s->frustum.roll, 0, 2.0f*M_PI);
+                ImGui::Checkbox("Colorize", &s->colorize);
             }
 
             ImGui::PopID();
@@ -155,6 +159,7 @@ ViewerSceneUpdate(void)
     for(int i=0; i<num_active_sensors; ++i)
     {
         SensorRenderData *s = &active_sensors[i];
+        V3 color = s->colorize ? colors[i % 3] : MakeV3(1, 1, 1);
 
         DepthPixel *depth_frame = GetSensorDepthFrame(s->sensor);
 
@@ -178,7 +183,7 @@ ViewerSceneUpdate(void)
 
         RenderCubes(s->point_cloud, num_points, s->frustum.position,
                     (V3){ s->frustum.pitch, s->frustum.yaw, s->frustum.roll },
-                    colors[i % 3]);
+                    color);
         RenderFrustum(&s->frustum);
     }
 }

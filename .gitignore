@@ -3,4 +3,6 @@ bin/
 imgui.ini
 test.dSYM/
 code.dSYM/
+sensors.ser
+sensors.ser*
 

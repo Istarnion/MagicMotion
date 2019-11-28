@@ -6,6 +6,7 @@
 #include "camera.cpp"
 #include "sensor_interface.cpp"
 #include "scene_viewer.cpp"
+#include "scene_presentation.cpp"
 #include "sensor_serialization.cpp"
 #include "octree.cpp"
 
@@ -18,7 +19,7 @@ int main(int num_args, char *args[])
 
     RendererInit("Code", 800, 600);
 
-    Scene viewer_scene = GetViewerScene();
+    Scene viewer_scene = GetPresentationScene();
     Scene *current_scene = &viewer_scene;
 
     current_scene->Init();

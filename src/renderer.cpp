@@ -297,11 +297,12 @@ RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation, V3 color)
     glBindVertexArray(cube_data.vertex_array);
     glUseProgram(cube_instanced_data.shader);
 
-    Mat4 model_matrix = TransformMat4(offset, (V3){ 1, 1, 1 }, rotation);
+    Mat4 model_matrix = TransformMat4(offset, (V3){ 2, 2, 2 }, rotation);
     Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
     glUniformMatrix4fv(cube_instanced_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
     glUniform3fv(cube_instanced_data.color_loc, 1, (float *)&color);
 
+    // Draw in instanced batches of up to 512 cubes at a time
     for(size_t i=0; i<num_cubes; i+=512)
     {
         int num_cubes_to_draw = MIN(512, num_cubes-i);

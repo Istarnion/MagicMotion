@@ -26,7 +26,9 @@ typedef struct
     size_t node_pool_index;
 } Octree;
 
-void BuildOctree(V3 *points, size_t num_points, Octree *tree);
+void ResetOctree(Octree *tree, size_t max_num_points, float bounding_size);
+void AddPointsToOctree(V3 *points, size_t num_points, Octree *tree);
+bool CheckBoxCollision(Octree *tree, V3 box_min, V3 box_max);
 
 #endif /* end of include guard: OCTREE_H_ */
 

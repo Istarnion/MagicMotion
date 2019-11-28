@@ -5,12 +5,14 @@
 #include "renderer.h"
 #include "ui.h"
 #include "sensor_serialization.h"
+#include "octree.h"
 
 typedef struct
 {
     SensorInfo *sensor;
     Frustum frustum;
     bool colorize;
+    bool show_frustum;
     V3 *point_cloud;
 } SensorRenderData;
 
@@ -27,6 +29,8 @@ static SensorInfo sensor_list[MAX_SENSORS];
 static SensorRenderData active_sensors[MAX_SENSORS];
 
 static Camera cam;
+
+static Octree octree;
 
 static void
 _UpdateProjectionMatrix()
@@ -123,6 +127,7 @@ ViewerSceneUpdate(void)
                 ImGui::SliderFloat("Yaw", &s->frustum.yaw, 0, 2.0f*M_PI);
                 ImGui::SliderFloat("Roll", &s->frustum.roll, 0, 2.0f*M_PI);
                 ImGui::Checkbox("Colorize", &s->colorize);
+                ImGui::Checkbox("Frustum", &s->show_frustum);
             }
 
             ImGui::PopID();
@@ -156,6 +161,16 @@ ViewerSceneUpdate(void)
 
     RendererSetViewMatrix(CameraGetViewMatrix(&cam));
 
+    int max_total_point_cloud_size = 0;
+    for(int i=0; i<num_active_sensors; ++i)
+    {
+        SensorRenderData *s = &active_sensors[i];
+        max_total_point_cloud_size += s->sensor->depth_stream_info.width *
+                                      s->sensor->depth_stream_info.height;
+    }
+
+    ResetOctree(&octree, max_total_point_cloud_size, 1000000);
+
     for(int i=0; i<num_active_sensors; ++i)
     {
         SensorRenderData *s = &active_sensors[i];
@@ -177,15 +192,34 @@ ViewerSceneUpdate(void)
             {
                 float pos_x = tanf((((float)x / (float)w)-0.5f)*fov) * depth;
                 float pos_y = tanf((0.5f-((float)y / (float)h))*(fov/aspect)) * depth;
-                s->point_cloud[num_points++] = (V3){ pos_x, pos_y, depth };
+                V3 point = (V3){ pos_x, pos_y, depth };
+                s->point_cloud[num_points++] = point;
             }
         }
+
+        AddPointsToOctree(s->point_cloud, num_points, &octree);
 
         RenderCubes(s->point_cloud, num_points, s->frustum.position,
                     (V3){ s->frustum.pitch, s->frustum.yaw, s->frustum.roll },
                     color);
-        RenderFrustum(&s->frustum);
+
+        if(s->show_frustum)
+        {
+            RenderFrustum(&s->frustum);
+        }
     }
+
+    /*
+    for(size_t i=0; i<octree.node_pool_index; ++i)
+    {
+        OctreeNode *node = &octree.node_pool[i];
+        if(node->count > 0 && node->count <= OCTREE_BIN_SIZE)
+        {
+            float s = node->size - 1;
+            RenderWireCube(node->center, (V3){ s, s, s });
+        }
+    }
+    */
 }
 
 void

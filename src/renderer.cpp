@@ -34,6 +34,7 @@ static Mat4 projection_view_matrix;
 
 static RenderData frustum_data;
 static RenderData cube_data;
+static RenderData wire_cube_data;
 static RenderInstancedData cube_instanced_data;
 
 static GLuint _CreateShaderProgram(const char *source_file);
@@ -62,6 +63,7 @@ RendererInit(const char *title, int width, int height)
 
     load_gl_functions();
 
+    glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -152,8 +154,8 @@ RendererInit(const char *title, int width, int height)
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float)*6, (GLvoid *)(sizeof(float)*3));
 
-        glGenBuffers(1, &frustum_data.element_buffer);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, frustum_data.element_buffer);
+        glGenBuffers(1, &cube_data.element_buffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cube_data.element_buffer);
 
         static const GLushort indices[] = {
              0,  1,  2,  0,  2,  3,
@@ -173,6 +175,31 @@ RendererInit(const char *title, int width, int height)
         cube_instanced_data.mvp_loc = glGetUniformLocation(cube_instanced_data.shader, "MVP");
         cube_instanced_data.positions_loc = glGetUniformLocation(cube_instanced_data.shader, "Positions");
         cube_instanced_data.color_loc = glGetUniformLocation(cube_instanced_data.shader, "Color");
+
+        // Then for the wire cube
+        static const GLushort wire_indices[] = {
+             0,  1,  1,  2,  2,  3,  3,  0,
+             0,  4,  3,  7,  1, 22,  2, 21,
+             7, 21, 21, 22, 22,  4,  4,  7
+        };
+
+        glGenVertexArrays(1, &wire_cube_data.vertex_array);
+        glBindVertexArray(wire_cube_data.vertex_array);
+
+        glGenBuffers(1, &wire_cube_data.vertex_buffer);
+        glBindBuffer(GL_ARRAY_BUFFER, wire_cube_data.vertex_buffer);
+
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float)*6, 0);
+
+        glGenBuffers(1, &wire_cube_data.element_buffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, wire_cube_data.element_buffer);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(wire_indices), wire_indices, GL_STATIC_DRAW);
+
+        wire_cube_data.shader = _CreateShaderProgram("shaders/wire_cube.glsl");
+        wire_cube_data.mvp_loc = glGetUniformLocation(wire_cube_data.shader, "MVP");
     }
 }
 
@@ -236,6 +263,19 @@ RendererSetProjectionMatrix(Mat4 p)
 {
     projection_matrix = p;
     projection_view_matrix = MulMat4(view_matrix, projection_matrix);
+}
+
+void
+RenderWireCube(V3 center, V3 size)
+{
+    Mat4 model_matrix = TransformMat4(center, size, MakeV3(0, 0, 0));
+    Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
+
+    glBindVertexArray(wire_cube_data.vertex_array);
+    glUseProgram(wire_cube_data.shader);
+    glUniformMatrix4fv(wire_cube_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
+
+    glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, NULL);
 }
 
 void

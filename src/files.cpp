@@ -3,6 +3,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#include "stb_image.h"
+
 char *
 LoadTextFile(const char *filename)
 {
@@ -25,5 +29,21 @@ void
 FreeTextFile(char *file_data)
 {
     free(file_data);
+}
+
+Image *
+LoadImage(Image *img, const char *filename)
+{
+    img->pixels = (unsigned int *)stbi_load(filename,
+                                            &img->width, &img->height,
+                                            NULL, 3);
+    return img;
+}
+
+void
+FreeImage(Image *img)
+{
+    stbi_image_free(img->pixels);
+    img->pixels = NULL;
 }
 

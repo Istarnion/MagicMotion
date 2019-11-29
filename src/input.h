@@ -6,7 +6,8 @@
 typedef enum
 {
     RELEASED,
-    PRESSED
+    PRESSED,
+    HELD
 } ButtonState;
 
 typedef struct

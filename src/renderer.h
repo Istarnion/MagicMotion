@@ -16,5 +16,6 @@ void RenderWireCube(V3 center, V3 size);
 void RenderCube(V3 center, V3 size);
 void RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation);
 void RenderFrustum(const Frustum *frustum);
+void RenderFullscreenQuad(void);
 
 #endif /* end of include guard: RENDERER_H_ */

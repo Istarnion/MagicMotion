@@ -18,6 +18,17 @@ InputNewFrame()
 {
     current_state.mouse_delta = MakeV3(0, 0, 0);
     current_state.mouse_scroll = 0;
+
+    if(current_state.forward == PRESSED) current_state.forward = HELD;
+    if(current_state.back == PRESSED) current_state.back = HELD;
+    if(current_state.up == PRESSED) current_state.up = HELD;
+    if(current_state.down == PRESSED) current_state.down = HELD;
+    if(current_state.left == PRESSED) current_state.left = HELD;
+    if(current_state.right == PRESSED) current_state.right = HELD;
+    if(current_state.cancel == PRESSED) current_state.cancel = HELD;
+    if(current_state.left_mouse_button == PRESSED) current_state.left_mouse_button = HELD;
+    if(current_state.middle_mouse_button == PRESSED) current_state.middle_mouse_button = HELD;
+    if(current_state.right_mouse_button == PRESSED) current_state.right_mouse_button = HELD;
 }
 
 InputState *
@@ -30,30 +41,38 @@ void
 InputKeyEvent(bool key_down, int sdl_key_scan_code)
 {
     ButtonState state = (key_down ? PRESSED : RELEASED);
+    ButtonState *key_state;
+
     switch(sdl_key_scan_code)
     {
         case KEY_FORWARD:
-            current_state.forward = state;
+            key_state = &current_state.forward;
             break;
         case KEY_BACK:
-            current_state.back = state;
+            key_state = &current_state.back;
             break;
         case KEY_UP:
-            current_state.up = state;
+            key_state = &current_state.up;
             break;
         case KEY_DOWN:
-            current_state.down = state;
+            key_state = &current_state.down;
             break;
         case KEY_LEFT:
-            current_state.left = state;
+            key_state = &current_state.left;
             break;
         case KEY_RIGHT:
-            current_state.right = state;
+            key_state = &current_state.right;
             break;
         case KEY_CANCEL:
-            current_state.cancel = state;
+            key_state = &current_state.cancel;
         default:
+            key_state = NULL;
             break;
+    }
+
+    if(key_state)
+    {
+        *key_state = state;
     }
 }
 
@@ -68,20 +87,35 @@ void
 InputMousePress(bool button_down, int button)
 {
     ButtonState state = (button_down ? PRESSED : RELEASED);
+    ButtonState *button_state;
+
     switch(button)
     {
         case 1:
-            current_state.left_mouse_button = state;
+            button_state = &current_state.left_mouse_button;
             break;
         case 2:
-            current_state.middle_mouse_button = state;
+            button_state = &current_state.middle_mouse_button;
             break;
         case 3:
-            current_state.right_mouse_button = state;
+            button_state = &current_state.right_mouse_button;
             break;
         default:
+            button_state = NULL;
             fprintf(stderr, "Unsupported butten pressed: %d\n", button);
             break;
+    }
+
+    if(button_state)
+    {
+        if(state == PRESSED && !!(*button_state))
+        {
+            *button_state = HELD;
+        }
+        else
+        {
+            *button_state = state;
+        }
     }
 }
 

@@ -47,7 +47,7 @@ int main(int num_args, char *args[])
                     break;
                 case SDL_KEYDOWN:
                 case SDL_KEYUP:
-                    if(!io.WantCaptureKeyboard)
+                    if(!io.WantCaptureKeyboard && e.key.repeat == 0)
                     {
                         InputKeyEvent(e.type == SDL_KEYDOWN, e.key.keysym.scancode);
                     }

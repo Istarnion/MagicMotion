@@ -189,6 +189,8 @@ SensorFinalize(SensorInfo *sensor)
             free(sensor->sensor_data->depth_frame);
         }
 
+        sensor->sensor_data->oni_device.close();
+
         delete sensor->sensor_data;
         sensor->sensor_data = NULL;
     }
@@ -267,7 +269,21 @@ GetSensorDepthFrame(SensorInfo *sensor)
         int num_pixels = sensor->depth_stream_info.width * sensor->depth_stream_info.height;
         for(int i = 0; i < num_pixels; ++i)
         {
-            *pixel = (float)*depth_data;
+            if(*depth_data != 0)
+            {
+                // Only update the depth frame if the new pixel has a value
+                *pixel = (float)*depth_data;
+            }
+            else if(*pixel != 0)
+            {
+                // Else, decay the value
+                *pixel += 5;
+                if(*pixel > sensor->depth_stream_info.max_depth)
+                {
+                    *pixel = 0;
+                }
+            }
+
             ++depth_data;
             ++pixel;
         }

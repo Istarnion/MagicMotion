@@ -36,6 +36,7 @@ static RenderData frustum_data;
 static RenderData cube_data;
 static RenderData wire_cube_data;
 static RenderInstancedData cube_instanced_data;
+static GLuint full_quad_shader;
 
 static GLuint _CreateShaderProgram(const char *source_file);
 static void _DeleteRenderData(RenderData *data);
@@ -201,6 +202,10 @@ RendererInit(const char *title, int width, int height)
         wire_cube_data.shader = _CreateShaderProgram("shaders/wire_cube.glsl");
         wire_cube_data.mvp_loc = glGetUniformLocation(wire_cube_data.shader, "MVP");
     }
+
+    {
+        full_quad_shader = _CreateShaderProgram("shaders/full_quad.glsl");
+    }
 }
 
 void
@@ -297,7 +302,7 @@ RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation, V3 color)
     glBindVertexArray(cube_data.vertex_array);
     glUseProgram(cube_instanced_data.shader);
 
-    Mat4 model_matrix = TransformMat4(offset, (V3){ 2, 2, 2 }, rotation);
+    Mat4 model_matrix = TransformMat4(offset, (V3){ 4, 4, 4 }, rotation);
     Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
     glUniformMatrix4fv(cube_instanced_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
     glUniform3fv(cube_instanced_data.color_loc, 1, (float *)&color);
@@ -352,6 +357,13 @@ RenderFrustum(const Frustum *frustum)
     glUniformMatrix4fv(frustum_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
 
     glDrawElements(GL_LINE_STRIP, 6*6, GL_UNSIGNED_SHORT, NULL);
+}
+
+void
+RenderFullscreenQuad(void)
+{
+    glUseProgram(full_quad_shader);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
 static GLint

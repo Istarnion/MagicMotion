@@ -1500,6 +1500,7 @@ typedef float GLclampf;
     GLE(void,       GenTextures,                GLsizei n, GLuint *textures) \
     GLE(void,       BindTexture,                GLenum target, GLuint texture) \
     GLE(void,       TexImage2D,                 GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid *data) \
+    GLE(void,       TexSubImage2D,              GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *data) \
     GLE(void,       TexParameteri,              GLenum target, GLenum pname, GLint param) \
     GLE(void,       ActiveTexture,              GLenum texture) \
     GLE(void,       GenerateMipmap,             GLenum target) \

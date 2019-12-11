@@ -23,15 +23,32 @@ typedef struct
 static PresentationSensorRenderData active_sensor;
 static Camera presentation_cam;
 static PresentationMode presentation_mode = PRESENTATION_SLIDES;
-static GLuint video_texture;
+static int point_cloud_stage = 0;
+static bool cube_touched_last_frame = false;
 
+static GLuint video_texture;
 #define NUM_SLIDES 6
 static GLuint slides[NUM_SLIDES];
 
-static float tween_t;
+static float linear_t;
 static int slide_index;
 
+static V3 cloud_colors[] = {
+    { 1.0, 1.0, 1.0 },
+    { 1.0, 0.5, 0.5 },
+    { 0.5, 1.0, 0.5 },
+    { 0.5, 0.5, 1.0 }
+};
+static int cloud_color_index = 0;
+
 #define LERP(a, b, t) ((a)*(1.0f-(t)) + (b)*(t))
+
+float
+tween(float t)
+{
+    float result = 3*t*t - 2*t*t*t;
+    return result;
+}
 
 bool
 PresentationSceneInit(void)
@@ -122,28 +139,6 @@ PresentationSceneUpdate(void)
 {
     _UpdateProjectionMatrix();
 
-    /*
-    if(ImGui::Begin("Sensor"))
-    {
-        ImGui::InputFloat3("Position", (float *)&active_sensor.frustum.position);
-        ImGui::SliderFloat("Pitch", &active_sensor.frustum.pitch, 0, 2.0f*M_PI);
-        ImGui::SliderFloat("Yaw", &active_sensor.frustum.yaw, 0, 2.0f*M_PI);
-        ImGui::SliderFloat("Roll", &active_sensor.frustum.roll, 0, 2.0f*M_PI);
-        ImGui::Checkbox("Frustum", &active_sensor.show_frustum);
-    }
-
-    ImGui::End();
-
-    if(ImGui::Begin("Camera"))
-    {
-        ImGui::InputFloat3("Position", (float *)&presentation_cam.position);
-        ImGui::SliderFloat("Pitch", &presentation_cam.pitch, 0, 2.0f*M_PI);
-        ImGui::SliderFloat("Yaw", &presentation_cam.yaw, 0, 2.0f*M_PI);
-    }
-
-    ImGui::End();
-    // */
-
     InputState *input = Input();
     if(input->right == PRESSED)
     {
@@ -155,10 +150,18 @@ PresentationSceneUpdate(void)
                 presentation_mode = PRESENTATION_VIDEO;
             }
         }
-        else
+        else if(presentation_mode == PRESENTATION_VIDEO)
         {
             presentation_mode = PRESENTATION_POINT_CLOUD;
-            tween_t = 0;
+            linear_t = 0;
+        }
+        else if(presentation_mode == PRESENTATION_POINT_CLOUD)
+        {
+            linear_t = 0;
+            if(point_cloud_stage < 2)
+            {
+                ++point_cloud_stage;
+            }
         }
     }
     else if(input->left == PRESSED)
@@ -174,11 +177,22 @@ PresentationSceneUpdate(void)
         }
         else if(presentation_mode == PRESENTATION_POINT_CLOUD)
         {
-            presentation_mode = PRESENTATION_VIDEO;
+            cloud_color_index = 0;
+            if(point_cloud_stage == 0)
+            {
+                presentation_mode = PRESENTATION_VIDEO;
+            }
+            else
+            {
+                linear_t = 0;
+                --point_cloud_stage;
+            }
         }
     }
 
     RendererSetViewMatrix(CameraGetViewMatrix(&presentation_cam));
+
+    float tween_t = tween(linear_t);
 
     switch(presentation_mode)
     {
@@ -203,13 +217,23 @@ PresentationSceneUpdate(void)
         }
         case PRESENTATION_POINT_CLOUD:
         {
-            presentation_cam.yaw = LERP(0, 0.2, tween_t);
-            presentation_cam.position = MakeV3(LERP(0, -1500, tween_t),
-                                               0,
-                                               LERP(0, -500, tween_t));
+            if(point_cloud_stage == 0)
+            {
+                presentation_cam.yaw = LERP(0, -1.57, tween_t);
+                presentation_cam.position = MakeV3(LERP(0, 13000, tween_t),
+                                                   0,
+                                                   LERP(0, 3000, tween_t));
+            }
+            else if(point_cloud_stage == 1)
+            {
+                presentation_cam.yaw = LERP(-1.57, 0.2, tween_t);
+                presentation_cam.position = MakeV3(LERP(13000, -1000, tween_t),
+                                                   0,
+                                                   LERP(3000, -750, tween_t));
+            }
 
             RendererSetViewMatrix(CameraGetViewMatrix(&presentation_cam));
-            tween_t = MIN(1.0f, tween_t + (1.0f/30.0f));
+            linear_t = MIN(1.0f, linear_t + (1.0f/120.0f));
 
             DepthPixel *depth_frame = GetSensorDepthFrame(&active_sensor.sensor);
 
@@ -217,6 +241,11 @@ PresentationSceneUpdate(void)
             const size_t h = active_sensor.sensor.depth_stream_info.height;
             const float fov = active_sensor.sensor.depth_stream_info.fov;
             const float aspect = active_sensor.sensor.depth_stream_info.aspect_ratio;
+
+            bool cube_touched = false;
+            size_t touching_points = 0;
+            V3 cube_center = (V3){ 0, 0, 2500 };
+            V3 cube_size = (V3){ 250, 250, 250 };
 
             size_t num_points = 0;
             for(size_t y=0; y<h; ++y)
@@ -229,20 +258,47 @@ PresentationSceneUpdate(void)
                     float pos_y = tanf((0.5f-((float)y / (float)h))*(fov/aspect)) * depth;
                     V3 point = (V3){ pos_x, pos_y, depth };
                     active_sensor.point_cloud[num_points++] = point;
+
+                    if(point_cloud_stage == 2)
+                    {
+                        if(!(point.x < cube_center.x-cube_size.x/2 ||
+                             point.x > cube_center.x+cube_size.x/2 ||
+                             point.y < cube_center.y-cube_size.y/2 ||
+                             point.y > cube_center.y+cube_size.y/2 ||
+                             point.z < cube_center.z/4-cube_size.z/2 ||
+                             point.z > cube_center.z/4+cube_size.z/2))
+                        {
+                            ++touching_points;
+                        }
+                    }
                 }
             }
+
+            cube_touched = touching_points > 3;
 
             RenderCubes(active_sensor.point_cloud, num_points,
                         active_sensor.frustum.position,
                         (V3){ active_sensor.frustum.pitch,
                               active_sensor.frustum.yaw,
                               active_sensor.frustum.roll },
-                        (V3){ 1, 1, 1 });
+                        cloud_colors[cloud_color_index]);
 
             if(active_sensor.show_frustum)
             {
                 RenderFrustum(&active_sensor.frustum);
             }
+
+            if(point_cloud_stage == 2)
+            {
+
+                RenderWireCube(cube_center, cube_size);
+                if(cube_touched && !cube_touched_last_frame)
+                {
+                    cloud_color_index = (cloud_color_index + 1) % 4;
+                }
+            }
+
+            cube_touched_last_frame = cube_touched;
 
             break;
         }

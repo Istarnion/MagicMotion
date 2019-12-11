@@ -147,11 +147,6 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
             return -5;
         }
 
-        if(enable_color && s->oni_device.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
-        {
-            s->oni_device.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
-        }
-
         const openni::VideoMode &vmode = s->depth_stream.getVideoMode();
         sensor->depth_stream_info.width = vmode.getResolutionX();
         sensor->depth_stream_info.height = vmode.getResolutionY();
@@ -163,6 +158,13 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
 
         s->depth_frame = (DepthPixel *)calloc(sensor->depth_stream_info.width * sensor->depth_stream_info.height,
                                               sizeof(DepthPixel));
+
+        // Try to enable image registration mode if supported
+        if(enable_color && s->oni_device.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
+        {
+            printf("Enabling image registration mode on %s\n", sensor->name);
+            s->oni_device.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
+        }
     }
     else
     {
@@ -269,10 +271,13 @@ GetSensorDepthFrame(SensorInfo *sensor)
         int num_pixels = sensor->depth_stream_info.width * sensor->depth_stream_info.height;
         for(int i = 0; i < num_pixels; ++i)
         {
+            /*
             if(*depth_data != 0)
             {
                 // Only update the depth frame if the new pixel has a value
+            */
                 *pixel = (float)*depth_data;
+            /*
             }
             else if(*pixel != 0)
             {
@@ -283,6 +288,7 @@ GetSensorDepthFrame(SensorInfo *sensor)
                     *pixel = 0;
                 }
             }
+            */
 
             ++depth_data;
             ++pixel;

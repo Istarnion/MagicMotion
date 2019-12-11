@@ -5,4 +5,6 @@ test.dSYM/
 code.dSYM/
 sensors.ser
 sensors.ser*
+OpenNI/
+OpenNI2/
 

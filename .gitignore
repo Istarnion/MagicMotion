@@ -7,4 +7,5 @@ sensors.ser
 sensors.ser*
 OpenNI/
 OpenNI2/
+libOpenNI2.dylib
 

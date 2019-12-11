@@ -1,8 +1,8 @@
-code
+launchpad
 bin/
 imgui.ini
 test.dSYM/
-code.dSYM/
+launchpad.dSYM/
 sensors.ser
 sensors.ser*
 OpenNI/

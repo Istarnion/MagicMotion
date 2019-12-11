@@ -121,6 +121,21 @@ AddPointsToOctree(V3 *points, size_t num_points, Octree *tree)
 bool
 CheckBoxCollision(Octree *tree, V3 box_min, V3 box_max)
 {
-    return false;
+    size_t touching_points = 0;
+
+    // TODO(istarnion): Implement!
+    /*
+    if(!(point.x < box_center.x-box_size.x/2 ||
+         point.x > box_center.x+box_size.x/2 ||
+         point.y < box_center.y-box_size.y/2 ||
+         point.y > box_center.y+box_size.y/2 ||
+         point.z < box_center.z/2-box_size.z/2 ||
+         point.z > box_center.z/2+box_size.z/2))
+    {
+        ++touching_points;
+    }
+    */
+
+    return touching_points > 3;
 }
 

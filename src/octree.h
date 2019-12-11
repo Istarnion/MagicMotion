@@ -28,7 +28,7 @@ typedef struct
 
 void ResetOctree(Octree *tree, size_t max_num_points, float bounding_size);
 void AddPointsToOctree(V3 *points, size_t num_points, Octree *tree);
-bool CheckBoxCollision(Octree *tree, V3 box_min, V3 box_max);
+bool CheckBoxCollision(Octree *tree, V3 box_center, V3 box_size);
 
 #endif /* end of include guard: OCTREE_H_ */
 

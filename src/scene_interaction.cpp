@@ -1,28 +1,20 @@
-#include "scene_viewer.h"
+#include "scene_interaction.h"
 
-#include <SDL.h>
 #include "sensor_interface.h"
 #include "renderer.h"
+#include "octree.h"
 #include "ui.h"
-#include "sensor_serialization.h"
 #include "utils.h"
 
-namespace viewer
+namespace interaction
 {
     typedef struct
     {
         SensorInfo *sensor;
         Frustum frustum;
-        bool colorize;
         bool show_frustum;
         V3 *point_cloud;
     } SensorRenderData;
-
-    static const V3 colors[] = {
-        (V3){ 1, 0, 0 },
-        (V3){ 0, 1, 0 },
-        (V3){ 0, 0, 1 }
-    };
 
     static int num_active_sensors;
     static SensorInfo sensor_list[MAX_SENSORS];
@@ -30,18 +22,24 @@ namespace viewer
 
     static Camera cam;
 
+    static bool cube_touched_last_frame = false;
+    static Octree octree;
+
+    static V3 cloud_colors[] = {
+        { 1.0, 1.0, 1.0 },
+        { 1.0, 0.5, 0.5 },
+        { 0.5, 1.0, 0.5 },
+        { 0.5, 0.5, 1.0 }
+    };
+    static int cloud_color_index = 0;
+
     bool
     SceneInit(void)
     {
-        cam.pitch = 0;
-        cam.yaw = 0;
-        cam.position = MakeV3(0, 0, 0);
+        cam.pitch = 0.187f;
+        cam.yaw = 0.113f;
+        cam.position = MakeV3(-500, 1000, -1300);
         CameraLookAt(&cam, MakeV3(0, 0, 0));
-
-        // We don't support plug and play of sensors
-        // because it does not seem to be supported by
-        // OpenNI2. This means the number of sensors will
-        // be fixed at startup.
 
         SerializedSensor serialized_sensors[MAX_SENSORS];
         int num_serialized_sensors = LoadSensors(serialized_sensors, MAX_SENSORS);
@@ -72,8 +70,6 @@ namespace viewer
             active_sensors[i].point_cloud = (V3 *)calloc(sensor->depth_stream_info.width * sensor->depth_stream_info.height,
                                                          sizeof(V3));
 
-            active_sensors[i].colorize = false;
-
             for(int j=0; j<num_serialized_sensors; ++j)
             {
                 if(strcmp(sensor->URI, serialized_sensors[j].URI) == 0)
@@ -101,39 +97,28 @@ namespace viewer
     {
         UpdateProjectionMatrix();
 
-        if(ImGui::Begin("Sensors"))
-        {
-            for(int i=0; i<num_active_sensors; ++i)
-            {
-                ImGui::PushID(i);
-
-                SensorRenderData *s = &active_sensors[i];
-                if(ImGui::CollapsingHeader(s->sensor->name))
-                {
-                    ImGui::InputFloat3("Position", (float *)&s->frustum.position);
-                    ImGui::SliderFloat("Pitch", &s->frustum.pitch, 0, 2.0f*M_PI);
-                    ImGui::SliderFloat("Yaw", &s->frustum.yaw, 0, 2.0f*M_PI);
-                    ImGui::SliderFloat("Roll", &s->frustum.roll, 0, 2.0f*M_PI);
-                    ImGui::Checkbox("Colorize", &s->colorize);
-                    ImGui::Checkbox("Frustum", &s->show_frustum);
-                }
-
-                ImGui::PopID();
-            }
-        }
-
-        ImGui::End();
-
         InputState *input = Input();
-
         FPSCamera(input, &cam);
 
         RendererSetViewMatrix(CameraGetViewMatrix(&cam));
 
+        int max_total_point_cloud_size = 0;
         for(int i=0; i<num_active_sensors; ++i)
         {
             SensorRenderData *s = &active_sensors[i];
-            V3 color = s->colorize ? colors[i % 3] : MakeV3(1, 1, 1);
+            max_total_point_cloud_size += s->sensor->depth_stream_info.width *
+                                          s->sensor->depth_stream_info.height;
+        }
+
+        ResetOctree(&octree, max_total_point_cloud_size, 1000000);
+
+        static V3 cube_center = (V3){ 0, 0, 2500 };
+        static V3 cube_size = (V3){ 250, 250, 250 };
+        bool cube_touched = false;
+
+        for(int i=0; i<num_active_sensors; ++i)
+        {
+            SensorRenderData *s = &active_sensors[i];
 
             DepthPixel *depth_frame = GetSensorDepthFrame(s->sensor);
 
@@ -146,26 +131,41 @@ namespace viewer
             for(size_t y=0; y<h; ++y)
             for(size_t x=0; x<w; ++x)
             {
-                float depth = depth_frame[x+y*w];
+                float depth = depth_frame[(w-x-1)+y*w];
                 if(depth > 0.0f)
                 {
                     float pos_x = tanf((((float)x / (float)w)-0.5f)*fov) * depth;
                     float pos_y = tanf((0.5f-((float)y / (float)h))*(fov/aspect)) * depth;
                     V3 point = (V3){ pos_x, pos_y, depth };
                     s->point_cloud[num_points++] = point;
+
                 }
             }
 
+            AddPointsToOctree(s->point_cloud, num_points, &octree);
 
-            RenderCubes(s->point_cloud, num_points, s->frustum.position,
-                        (V3){ s->frustum.pitch, s->frustum.yaw, s->frustum.roll },
-                        color);
+            RenderCubes(s->point_cloud, num_points,
+                        s->frustum.position,
+                        (V3){ s->frustum.pitch,
+                              s->frustum.yaw,
+                              s->frustum.roll },
+                        cloud_colors[cloud_color_index]);
 
             if(s->show_frustum)
             {
                 RenderFrustum(&s->frustum);
             }
         }
+
+        RenderWireCube(cube_center, cube_size);
+
+        cube_touched = CheckBoxCollision(&octree, cube_center, cube_size);
+        if(cube_touched && !cube_touched_last_frame)
+        {
+            cloud_color_index = (cloud_color_index + 1) % 4;
+        }
+
+        cube_touched_last_frame = cube_touched;
     }
 
     void
@@ -183,12 +183,12 @@ namespace viewer
 }
 
 Scene
-GetViewerScene(void)
+GetInteractionScene(void)
 {
     Scene result;
-    result.Init = &viewer::SceneInit;
-    result.Update = &viewer::SceneUpdate;
-    result.End = &viewer::SceneEnd;
+    result.Init = &interaction::SceneInit;
+    result.Update = &interaction::SceneUpdate;
+    result.End = &interaction::SceneEnd;
 
     return result;
 }

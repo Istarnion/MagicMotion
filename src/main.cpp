@@ -13,6 +13,13 @@
 #include "scene_video.cpp"
 #include "scene_interaction.cpp"
 
+enum SceneType
+{
+    SCENE_VIDEO,
+    SCENE_VIEWER,
+    SCENE_INTERACTION
+};
+
 int main(int num_args, char *args[])
 {
     bool running = true;
@@ -22,7 +29,8 @@ int main(int num_args, char *args[])
 
     RendererInit("Code", 800, 600);
 
-    Scene scene = GetViewerScene();
+    SceneType scene_type = SCENE_VIDEO;
+    Scene scene = GetVideoScene();
 
     scene.Init();
 
@@ -87,6 +95,37 @@ int main(int num_args, char *args[])
         }
 
         RendererClear();
+
+        if(ImGui::Begin("Scenes"))
+        {
+            SceneType old_scene = scene_type;
+            ImGui::RadioButton("Video", (int *)&scene_type, SCENE_VIDEO);
+            ImGui::RadioButton("Viewer", (int *)&scene_type, SCENE_VIEWER);
+            ImGui::RadioButton("Interaction", (int *)&scene_type, SCENE_INTERACTION);
+
+            if(old_scene != scene_type)
+            {
+                scene.End();
+
+                switch(scene_type)
+                {
+                    case SCENE_VIDEO:
+                        scene = GetVideoScene();
+                        break;
+                    case SCENE_VIEWER:
+                        scene = GetViewerScene();
+                        break;
+                    case SCENE_INTERACTION:
+                        scene = GetInteractionScene();
+                        break;
+                    default: break;
+                }
+
+                scene.Init();
+            }
+        }
+
+        ImGui::End();
 
         scene.Update();
 

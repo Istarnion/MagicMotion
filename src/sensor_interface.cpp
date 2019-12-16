@@ -191,8 +191,6 @@ SensorFinalize(SensorInfo *sensor)
             free(sensor->sensor_data->depth_frame);
         }
 
-        sensor->sensor_data->oni_device.close();
-
         delete sensor->sensor_data;
         sensor->sensor_data = NULL;
     }

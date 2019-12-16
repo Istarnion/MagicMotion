@@ -22,7 +22,7 @@ int main(int num_args, char *args[])
 
     RendererInit("Code", 800, 600);
 
-    Scene scene = GetVideoScene();
+    Scene scene = GetViewerScene();
 
     scene.Init();
 
@@ -94,6 +94,7 @@ int main(int num_args, char *args[])
     }
 
     scene.End();
+    FinalizeSensorInterface();
     RendererQuit();
     SDL_Quit();
     return 0;

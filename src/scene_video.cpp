@@ -164,8 +164,6 @@ namespace video
         glDeleteTextures(1, &depth_texture);
 
         free(depth_pixels);
-
-        FinalizeSensorInterface();
     }
 }
 

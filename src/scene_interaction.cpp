@@ -177,8 +177,6 @@ namespace interaction
             SensorFinalize(active_sensors[i].sensor);
             free(active_sensors[i].point_cloud);
         }
-
-        FinalizeSensorInterface();
     }
 }
 

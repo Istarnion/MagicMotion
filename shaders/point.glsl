@@ -1,17 +1,17 @@
 #if defined(VERTEX_SHADER)
 
+layout(location=0) in vec3 v_position;
+layout(location=1) in vec3 v_color;
+
 uniform mat4 MVP;
-uniform vec3 Positions[256];
-uniform vec3 Color[256];
 
 out vec3 point_color;
 
 void
 main()
 {
-    vec3 pos = Positions[gl_InstanceID];
-    point_color = Color[gl_InstanceID];
-    gl_Position = MVP * vec4(pos, 1.0);
+    point_color = v_color;
+    gl_Position = MVP * vec4(v_position, 1.0);
 }
 
 #else

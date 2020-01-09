@@ -35,8 +35,8 @@ static Mat4 projection_view_matrix;
 static RenderData frustum_data;
 static RenderData cube_data;
 static RenderData wire_cube_data;
+static RenderData point_data;
 static RenderInstancedData cube_instanced_data;
-static RenderInstancedData point_instanced_data;
 static GLuint full_quad_shader;
 
 static GLuint _CreateShaderProgram(const char *source_file);
@@ -205,10 +205,25 @@ RendererInit(const char *title, int width, int height)
     }
 
     {
-        point_instanced_data.shader = _CreateShaderProgram("shaders/instanced_points.glsl");
-        point_instanced_data.mvp_loc = glGetUniformLocation(point_instanced_data.shader, "MVP");
-        point_instanced_data.positions_loc = glGetUniformLocation(point_instanced_data.shader, "Positions");
-        point_instanced_data.color_loc = glGetUniformLocation(point_instanced_data.shader, "Color");
+        glGenVertexArrays(1, &point_data.vertex_array);
+        glBindVertexArray(point_data.vertex_array);
+
+        glGenBuffers(1, &point_data.vertex_buffer);
+        glBindBuffer(GL_ARRAY_BUFFER, point_data.vertex_buffer);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float)*3, 0);
+
+        // We're abusing the element buffer member here to do non-interlaced position and color
+        // Consider changing the RenderData struct to better suit the various needs
+        glGenBuffers(1, &point_data.element_buffer);
+        glBindBuffer(GL_ARRAY_BUFFER, point_data.element_buffer);
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float)*3, 0);
+
+        point_data.shader = _CreateShaderProgram("shaders/point.glsl");
+        point_data.mvp_loc = glGetUniformLocation(cube_data.shader, "MVP");
     }
 
     {
@@ -221,6 +236,7 @@ RendererQuit(void)
 {
     _DeleteRenderData(&frustum_data);
     _DeleteRenderData(&cube_data);
+    _DeleteRenderData(&point_data);
 
     glDeleteProgram(cube_instanced_data.shader);
 
@@ -327,20 +343,20 @@ RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation, V3 color)
 void
 RenderPointCloud(V3 *points, V3 *colors, size_t num_points, V3 offset, V3 rotation)
 {
-    glUseProgram(point_instanced_data.shader);
+    glBindVertexArray(point_data.vertex_array);
+    glUseProgram(point_data.shader);
 
-    Mat4 model_matrix = TransformMat4(offset, (V3){ 4, 4, 4 }, rotation);
+    Mat4 model_matrix = TransformMat4(offset, (V3){ 1, 1, 1 }, rotation);
     Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
-    glUniformMatrix4fv(point_instanced_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
+    glUniformMatrix4fv(point_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
 
-    // Draw in instanced batches of up to 512 points at a time
-    for(size_t i=0; i<num_points; i+=256)
-    {
-        int num_points_to_draw = MIN(256, num_points-i);
-        glUniform3fv(point_instanced_data.positions_loc, num_points_to_draw, (GLfloat *)(points+i));
-        glUniform3fv(point_instanced_data.color_loc, num_points_to_draw, (GLfloat *)(colors+i));
-        glDrawArraysInstanced(GL_POINTS, 0, 1, num_points_to_draw);
-    }
+    glBindBuffer(GL_ARRAY_BUFFER, point_data.vertex_buffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(V3)*num_points, points, GL_STREAM_DRAW);
+
+    glBindBuffer(GL_ARRAY_BUFFER, point_data.element_buffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(V3)*num_points, colors, GL_STREAM_DRAW);
+
+    glDrawArrays(GL_POINTS, 0, num_points);
 }
 
 void

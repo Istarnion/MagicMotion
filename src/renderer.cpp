@@ -36,6 +36,7 @@ static RenderData frustum_data;
 static RenderData cube_data;
 static RenderData wire_cube_data;
 static RenderInstancedData cube_instanced_data;
+static RenderInstancedData point_instanced_data;
 static GLuint full_quad_shader;
 
 static GLuint _CreateShaderProgram(const char *source_file);
@@ -204,6 +205,13 @@ RendererInit(const char *title, int width, int height)
     }
 
     {
+        point_instanced_data.shader = _CreateShaderProgram("shaders/instanced_points.glsl");
+        point_instanced_data.mvp_loc = glGetUniformLocation(point_instanced_data.shader, "MVP");
+        point_instanced_data.positions_loc = glGetUniformLocation(point_instanced_data.shader, "Positions");
+        point_instanced_data.color_loc = glGetUniformLocation(point_instanced_data.shader, "Color");
+    }
+
+    {
         full_quad_shader = _CreateShaderProgram("shaders/full_quad.glsl");
     }
 }
@@ -313,6 +321,25 @@ RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation, V3 color)
         int num_cubes_to_draw = MIN(512, num_cubes-i);
         glUniform3fv(cube_instanced_data.positions_loc, num_cubes_to_draw, (GLfloat *)(centers+i));
         glDrawElementsInstanced(GL_TRIANGLES, 6*6, GL_UNSIGNED_SHORT, NULL, num_cubes_to_draw);
+    }
+}
+
+void
+RenderPointCloud(V3 *points, V3 *colors, size_t num_points, V3 offset, V3 rotation)
+{
+    glUseProgram(point_instanced_data.shader);
+
+    Mat4 model_matrix = TransformMat4(offset, (V3){ 4, 4, 4 }, rotation);
+    Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
+    glUniformMatrix4fv(point_instanced_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
+
+    // Draw in instanced batches of up to 512 points at a time
+    for(size_t i=0; i<num_points; i+=256)
+    {
+        int num_points_to_draw = MIN(256, num_points-i);
+        glUniform3fv(point_instanced_data.positions_loc, num_points_to_draw, (GLfloat *)(points+i));
+        glUniform3fv(point_instanced_data.color_loc, num_points_to_draw, (GLfloat *)(colors+i));
+        glDrawArraysInstanced(GL_POINTS, 0, 1, num_points_to_draw);
     }
 }
 

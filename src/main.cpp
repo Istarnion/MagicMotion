@@ -29,8 +29,8 @@ int main(int num_args, char *args[])
 
     RendererInit("Code", 800, 600);
 
-    SceneType scene_type = SCENE_VIDEO;
-    Scene scene = GetVideoScene();
+    SceneType scene_type = SCENE_VIEWER;
+    Scene scene = GetViewerScene();
 
     scene.Init();
 

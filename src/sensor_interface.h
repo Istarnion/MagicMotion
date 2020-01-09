@@ -37,6 +37,7 @@ typedef struct
 typedef float DepthPixel;
 
 #define INTENSITY(pixel) ((pixel).r * 0.333f + (pixel).g * 0.333f + (pixel).b * 0.333f)
+#define COLOR_TO_V3(c) (V3){ (c).r/255.0f, (c).g/255.0f, (c).b/255.0f }
 
 void InitializeSensorInterface(void);
 void FinalizeSensorInterface(void);

@@ -16,6 +16,7 @@ namespace viewer
         bool colorize;
         bool show_frustum;
         V3 *point_cloud;
+        V3 *colors;
     } SensorRenderData;
 
     static const V3 colors[] = {
@@ -51,7 +52,7 @@ namespace viewer
         {
             SensorInfo *sensor = &sensor_list[i];
             active_sensors[i].sensor = sensor;
-            int rc = SensorInitialize(sensor, false, true);
+            int rc = SensorInitialize(sensor, true, true);
             if(rc)
             {
                 fprintf(stderr, "Failed to initialize %s %s (URI: %s).\n", sensor->vendor, sensor->name, sensor->URI);
@@ -69,8 +70,9 @@ namespace viewer
                 .far_plane = sensor->depth_stream_info.max_depth
             };
 
-            active_sensors[i].point_cloud = (V3 *)calloc(sensor->depth_stream_info.width * sensor->depth_stream_info.height,
-                                                         sizeof(V3));
+            size_t point_cloud_size = sensor->depth_stream_info.width * sensor->depth_stream_info.height;
+            active_sensors[i].point_cloud = (V3 *)calloc(point_cloud_size, sizeof(V3));
+            active_sensors[i].colors = (V3 *)calloc(point_cloud_size, sizeof(V3));
 
             active_sensors[i].colorize = false;
 
@@ -136,6 +138,7 @@ namespace viewer
             V3 color = s->colorize ? colors[i % 3] : MakeV3(1, 1, 1);
 
             DepthPixel *depth_frame = GetSensorDepthFrame(s->sensor);
+            ColorPixel *color_frame = GetSensorColorFrame(s->sensor);
 
             const size_t w = s->sensor->depth_stream_info.width;
             const size_t h = s->sensor->depth_stream_info.height;
@@ -146,9 +149,20 @@ namespace viewer
             for(size_t y=0; y<h; ++y)
             for(size_t x=0; x<w; ++x)
             {
-                float depth = depth_frame[x+y*w];
+                size_t index = x+y*w;
+                float depth = depth_frame[index];
                 if(depth > 0.0f)
                 {
+                    if(s->colorize)
+                    {
+                        s->colors[num_points] = color;
+                    }
+                    else
+                    {
+                        ColorPixel c = color_frame[index];
+                        s->colors[num_points] = COLOR_TO_V3(c);
+                    }
+
                     float pos_x = tanf((((float)x / (float)w)-0.5f)*fov) * depth;
                     float pos_y = tanf((0.5f-((float)y / (float)h))*(fov/aspect)) * depth;
                     V3 point = (V3){ pos_x, pos_y, depth };
@@ -157,9 +171,8 @@ namespace viewer
             }
 
 
-            RenderCubes(s->point_cloud, num_points, s->frustum.position,
-                        (V3){ s->frustum.pitch, s->frustum.yaw, s->frustum.roll },
-                        color);
+            RenderPointCloud(s->point_cloud, s->colors, num_points, s->frustum.position,
+                             (V3){ s->frustum.pitch, s->frustum.yaw, s->frustum.roll });
 
             if(s->show_frustum)
             {

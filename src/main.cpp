@@ -34,8 +34,15 @@ int main(int num_args, char *args[])
 
     scene.Init();
 
+    const size_t max_num_frametime_samples = 512;
+    Uint64 frametime_samples[max_num_frametime_samples];
+    memset(frametime_samples, 0, sizeof(frametime_samples));
+    size_t frametime_samples_head = 0;
+
     while(running)
     {
+        Uint64 start_time = SDL_GetPerformanceCounter();
+
         InputNewFrame();
         SDL_Event e;
         while(SDL_PollEvent(&e))
@@ -96,6 +103,31 @@ int main(int num_args, char *args[])
 
         RendererClear();
 
+        if(ImGui::Begin("Profiling"))
+        {
+            float frametimes_ms[max_num_frametime_samples];
+            const double frequency = 1000.0 / SDL_GetPerformanceFrequency();
+            float sum = 0.0f;
+            float min_frametime = 1e10f;
+            float max_frametime = 0.0f;
+
+            for(size_t i=0; i<max_num_frametime_samples; ++i)
+            {
+                float frametime = (float)(frametime_samples[(frametime_samples_head+i)%max_num_frametime_samples]*frequency);
+                frametimes_ms[i] = frametime;
+                sum += frametime;
+                if(frametime > max_frametime) max_frametime = frametime;
+                if(frametime < min_frametime) min_frametime = frametime;
+            }
+
+            float average_frametime = sum / max_num_frametime_samples;
+            ImGui::Text("Frametime avg: %.00f ms, min: %.00f ms, max: %.00f ms",
+                        average_frametime, min_frametime, max_frametime);
+            ImGui::PlotLines("##", frametimes_ms, max_num_frametime_samples);
+        }
+
+        ImGui::End();
+
         if(ImGui::Begin("Scenes"))
         {
             SceneType old_scene = scene_type;
@@ -130,6 +162,10 @@ int main(int num_args, char *args[])
         scene.Update();
 
         RendererDisplay();
+
+        Uint64 end_time = SDL_GetPerformanceCounter();
+        frametime_samples[frametime_samples_head++] = end_time - start_time;
+        if(frametime_samples_head >= max_num_frametime_samples) frametime_samples_head = 0;
     }
 
     scene.End();

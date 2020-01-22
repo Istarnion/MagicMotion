@@ -48,3 +48,4 @@ ColorPixel *GetSensorColorFrame(SensorInfo *sensor);
 DepthPixel *GetSensorDepthFrame(SensorInfo *sensor);
 
 #endif /* end of include guard: SENSOR_INTERFACE_H_ */
+

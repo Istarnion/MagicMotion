@@ -3,6 +3,10 @@
 
 #include <math.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define RADIANS(d) ((float)(d) * (M_PI / 180.0f))
 #define DEGREES(r) ((float)(r) * (180.0f / M_PI))
 
@@ -393,6 +397,8 @@ TransformMat4(V3 pos, V3 scale, V3 euler)
     return result;
 }
 
-
+#ifdef __cplusplus
+}
+#endif
 #endif /* end of include guard: MAGIC_MATH_H_ */
 

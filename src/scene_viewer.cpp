@@ -132,6 +132,7 @@ namespace viewer
 
         RendererSetViewMatrix(CameraGetViewMatrix(&cam));
 
+
         for(int i=0; i<num_active_sensors; ++i)
         {
             SensorRenderData *s = &active_sensors[i];
@@ -170,7 +171,6 @@ namespace viewer
                 }
             }
 
-
             RenderPointCloud(s->point_cloud, s->colors, num_points, s->frustum.position,
                              (V3){ s->frustum.pitch, s->frustum.yaw, s->frustum.roll });
 
@@ -179,6 +179,12 @@ namespace viewer
                 RenderFrustum(&s->frustum);
             }
         }
+
+        /*
+        V3 point = (V3){ 0, 0, 0 };
+        V3 color = colors[0];
+        RenderPointCloud(&point, &color, 1, (V3){ 0, 0, 0 }, (V3){ 0, 0, 0 });
+        */
     }
 
     void

@@ -7,13 +7,18 @@ SRC=$(shell find src -name '*.cpp')
 HEADERS=$(shell find src -name '*.h')
 
 EXE=launchpad
+SHARED_LIB=libMagicMotion.so
 
-${EXE}: ${SRC} ${HEADERS}
+${EXE}: ${SRC} ${HEADERS} ${SHARED_LIB}
 	${CC} ${CFLAGS} src/main.cpp -o $@ ${LIBS}
+
+${SHARED_LIB}:
+	${CC} ${CFLAGS}
 
 .PHONY: clean
 clean:
 	rm -f ${EXE}
+	rm -f ${SHARED_LIB}
 
 .PHONY: test
 test:

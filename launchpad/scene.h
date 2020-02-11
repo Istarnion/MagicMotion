@@ -2,7 +2,7 @@
 #define SCENE_H_
 
 typedef bool (* SceneInitFunc)(void);
-typedef void (* SceneUpdateFunc)(void);
+typedef void (* SceneUpdateFunc)(float);
 typedef void (* SceneEndFunc)(void);
 
 typedef struct

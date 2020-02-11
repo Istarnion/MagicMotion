@@ -1,6 +1,7 @@
 #include "sensor_interface.h"
 
 #include "OpenNI.h"
+#include "utils.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +38,7 @@ void
 FinalizeSensorInterface(void)
 {
     puts("Shutting down OpenNI2..");
+    
     openni::OpenNI::shutdown();
     puts("Done.");
 }
@@ -74,6 +76,8 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
     Sensor *s = new Sensor;
     assert(s);
     sensor->sensor_data = s;
+
+    printf("Initializing sensor %s\n", sensor->URI);
 
     openni::Status rc;
     rc = s->oni_device.open(sensor->URI);
@@ -179,6 +183,8 @@ SensorFinalize(SensorInfo *sensor)
 {
     if(sensor->sensor_data)
     {
+        printf("Finalizing sensor %s\n", sensor->URI);
+
         if(sensor->sensor_data->color_frame)
         {
             sensor->sensor_data->color_stream.destroy();

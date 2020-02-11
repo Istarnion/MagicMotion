@@ -12,6 +12,7 @@ InputState current_state;
 #define KEY_LEFT    SDL_SCANCODE_A
 #define KEY_RIGHT   SDL_SCANCODE_D
 #define KEY_CANCEL  SDL_SCANCODE_ESCAPE
+#define KEY_SHIFT   SDL_SCANCODE_LSHIFT
 
 void
 InputNewFrame()
@@ -26,6 +27,7 @@ InputNewFrame()
     if(current_state.left == PRESSED) current_state.left = HELD;
     if(current_state.right == PRESSED) current_state.right = HELD;
     if(current_state.cancel == PRESSED) current_state.cancel = HELD;
+    if(current_state.shift == PRESSED) current_state.shift = HELD;
     if(current_state.left_mouse_button == PRESSED) current_state.left_mouse_button = HELD;
     if(current_state.middle_mouse_button == PRESSED) current_state.middle_mouse_button = HELD;
     if(current_state.right_mouse_button == PRESSED) current_state.right_mouse_button = HELD;
@@ -65,6 +67,10 @@ InputKeyEvent(bool key_down, int sdl_key_scan_code)
             break;
         case KEY_CANCEL:
             key_state = &current_state.cancel;
+            break;
+        case KEY_SHIFT:
+            key_state = &current_state.shift;
+            break;
         default:
             key_state = NULL;
             break;

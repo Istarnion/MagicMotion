@@ -1,44 +1,35 @@
-#include <SDL.h>
 #include "ui.h"
-#include "renderer.cpp"
-#include "files.cpp"
+#include <stdio.h>
+#include <SDL.h>
 #include "input.cpp"
+#include "files.cpp"
+#include "magic_motion.h"
+#include "renderer.cpp"
 #include "camera.cpp"
-#include "sensor_interface.cpp"
-#include "sensor_serialization.cpp"
-#include "octree.cpp"
-#include "utils.h"
 
 #include "scene_viewer.cpp"
-#include "scene_video.cpp"
-#include "scene_interaction.cpp"
 
-enum SceneType
+int
+main(int num_args, char *args[])
 {
-    SCENE_VIDEO,
-    SCENE_VIEWER,
-    SCENE_INTERACTION
-};
-
-int main(int num_args, char *args[])
-{
-    bool running = true;
-
     SDL_Init(SDL_INIT_EVERYTHING);
-    InitializeSensorInterface();
+
+    MagicMotion_Initialize();
+    unsigned int num_cameras = MagicMotion_GetNumCameras();
+    printf("%u cameras initialized\n", num_cameras);
+
+    Scene scene = GetViewerScene();
+    scene.Init();
 
     RendererInit("Code", 800, 600);
-
-    SceneType scene_type = SCENE_VIEWER;
-    Scene scene = GetViewerScene();
-
-    scene.Init();
 
     const size_t max_num_frametime_samples = 512;
     Uint64 frametime_samples[max_num_frametime_samples];
     memset(frametime_samples, 0, sizeof(frametime_samples));
     size_t frametime_samples_head = 0;
+    float delta_time = 0.03333f;
 
+    bool running = true;
     while(running)
     {
         Uint64 start_time = SDL_GetPerformanceCounter();
@@ -128,50 +119,24 @@ int main(int num_args, char *args[])
 
         ImGui::End();
 
-        if(ImGui::Begin("Scenes"))
-        {
-            SceneType old_scene = scene_type;
-            ImGui::RadioButton("Video", (int *)&scene_type, SCENE_VIDEO);
-            ImGui::RadioButton("Viewer", (int *)&scene_type, SCENE_VIEWER);
-            ImGui::RadioButton("Interaction", (int *)&scene_type, SCENE_INTERACTION);
-
-            if(old_scene != scene_type)
-            {
-                scene.End();
-
-                switch(scene_type)
-                {
-                    case SCENE_VIDEO:
-                        scene = GetVideoScene();
-                        break;
-                    case SCENE_VIEWER:
-                        scene = GetViewerScene();
-                        break;
-                    case SCENE_INTERACTION:
-                        scene = GetInteractionScene();
-                        break;
-                    default: break;
-                }
-
-                scene.Init();
-            }
-        }
-
-        ImGui::End();
-
-        scene.Update();
+        MagicMotion_CaptureFrame();
+        scene.Update(delta_time);
 
         RendererDisplay();
 
         Uint64 end_time = SDL_GetPerformanceCounter();
         frametime_samples[frametime_samples_head++] = end_time - start_time;
         if(frametime_samples_head >= max_num_frametime_samples) frametime_samples_head = 0;
+
+        delta_time = (float)(end_time - start_time) / (float)SDL_GetPerformanceFrequency();
     }
 
     scene.End();
-    FinalizeSensorInterface();
+
     RendererQuit();
+
+    MagicMotion_Finalize();
+
     SDL_Quit();
-    return 0;
 }
 

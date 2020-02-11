@@ -1,11 +1,11 @@
-launchpad
-bin/
+magicmotion_test
 imgui.ini
 test.dSYM/
-launchpad.dSYM/
+magicmotion_test.dSYM/
 sensors.ser
 sensors.ser*
 OpenNI/
 OpenNI2/
 libOpenNI2.dylib
-
+libMagicMotion.dylib
+macOS/Build/

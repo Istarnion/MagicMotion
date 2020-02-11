@@ -16,6 +16,7 @@ typedef struct
     ButtonState left_mouse_button;
     ButtonState middle_mouse_button;
     ButtonState right_mouse_button;
+    ButtonState shift;
     V3 mouse_pos;
     V3 mouse_delta;
     int mouse_scroll;

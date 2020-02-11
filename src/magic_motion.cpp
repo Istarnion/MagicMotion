@@ -1,9 +1,328 @@
+#include "sensor_interface.cpp"
+#include "sensor_serialization.cpp"
+
 #include "magic_motion.h"
-#include "sensor_interface.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define MAX_HITBOXES 32
+#define MAX_HITBOX_EVENTS 16
+
+// How many points needs to be inside a hitbox to be considered a hit?
+#define HITBOX_POINT_TRESHOLD 8
+
+typedef struct
+{
+    V3 position;
+    V3 size;
+    int point_count;
+    bool considered_hit;
+} Hitbox;
+
+static struct
+{
+    SensorInfo sensors[MAX_SENSORS];
+    Frustum sensor_frustums[MAX_SENSORS];
+    unsigned int num_active_sensors;
+
+    V3 *spatial_cloud;
+    Color *color_cloud;
+    MagicMotionTag *tag_cloud;
+    unsigned int cloud_size;
+    unsigned int cloud_capacity;
+    
+    Hitbox hitboxes[MAX_HITBOXES];
+    unsigned int num_hitboxes;
+    
+    MagicMotionHitboxEvent hitbox_events[MAX_HITBOX_EVENTS];
+    unsigned int num_hitbox_events;
+} magic_motion;
+
+static bool
+MagicMotion_BoxVsV3(Hitbox b, V3 v)
+{
+    float hw = b.size.x / 2.0f;
+    float hh = b.size.y / 2.0f;
+    float hd = b.size.z / 2.0f;
+    
+    return !(v.x < b.position.x - hw || v.x > b.position.x + hw ||
+             v.y < b.position.y - hh || v.y > b.position.y + hh ||
+             v.z < b.position.z - hd || v.z > b.position.z + hd);
+}
+
+void
+MagicMotion_Initialize(void)
+{
+    InitializeSensorInterface();
+
+    SerializedSensor serialized_sensors[MAX_SENSORS];
+    int num_serialized_sensors = LoadSensors(serialized_sensors, MAX_SENSORS);
+
+    magic_motion.cloud_size = 0;
+    magic_motion.cloud_capacity = 0;
+    magic_motion.num_active_sensors = PollSensorList(magic_motion.sensors, MAX_SENSORS);
+    for(int i=0; i<magic_motion.num_active_sensors; ++i)
+    {
+        SensorInfo *sensor = &magic_motion.sensors[i];
+        int rc = SensorInitialize(sensor, true, true);
+        if(rc)
+        {
+            fprintf(stderr, "Failed to initialize %s %s (URI: %s).\n", sensor->vendor, sensor->name, sensor->URI);
+            return;
+        }
+
+        magic_motion.sensor_frustums[i] = (Frustum){
+            .position = (V3){ 0, 0, 0 },
+            .pitch = 0,
+            .yaw = 0,
+            .roll = 0,
+            .fov = sensor->depth_stream_info.fov,
+            .aspect = sensor->depth_stream_info.aspect_ratio,
+            .near_plane = MAX(0.05f, sensor->depth_stream_info.min_depth / 100.0f),
+            .far_plane = sensor->depth_stream_info.max_depth / 100.0f
+        };
+
+        size_t point_cloud_size = sensor->depth_stream_info.width * sensor->depth_stream_info.height;
+        magic_motion.cloud_capacity += point_cloud_size;
+
+        for(int j=0; j<num_serialized_sensors; ++j)
+        {
+            if(strcmp(sensor->URI, serialized_sensors[j].URI) == 0)
+            {
+                printf("Loading data for URI %s\n", sensor->URI);
+                magic_motion.sensor_frustums[i].position   = serialized_sensors[j].frustum.position;
+                magic_motion.sensor_frustums[i].pitch      = serialized_sensors[j].frustum.pitch;
+                magic_motion.sensor_frustums[i].yaw        = serialized_sensors[j].frustum.yaw;
+                magic_motion.sensor_frustums[i].roll       = serialized_sensors[j].frustum.roll;
+                break;
+            }
+        }
+    }
+
+    for(int i=0; i<num_serialized_sensors; ++i)
+    {
+        free(serialized_sensors[i].URI);
+    }
+    
+    magic_motion.spatial_cloud = (V3 *)calloc(magic_motion.cloud_capacity, sizeof(V3));
+    magic_motion.tag_cloud = (MagicMotionTag *)calloc(magic_motion.cloud_capacity, sizeof(MagicMotionTag));
+    magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity, sizeof(Color));
+    
+    printf("MagicMotion initialized with %u active sensors. Point cloud size: %u\n",
+           magic_motion.num_active_sensors, magic_motion.cloud_size);
+}
+
+void
+MagicMotion_Finalize(void)
+{
+    free(magic_motion.color_cloud);
+    free(magic_motion.tag_cloud);
+    free(magic_motion.spatial_cloud);
+    
+    for(int i=0; i<magic_motion.num_active_sensors; ++i)
+    {
+        SaveSensor(magic_motion.sensors[i].URI, &magic_motion.sensor_frustums[i]);
+        SensorFinalize(&magic_motion.sensors[i]);
+    }
+
+    FinalizeSensorInterface();
+}
+
+unsigned int
+MagicMotion_GetNumCameras(void)
+{
+    return magic_motion.num_active_sensors;
+}
+
+const Frustum *
+MagicMotion_GetCameraFrustums(void)
+{
+    return magic_motion.sensor_frustums;
+}
+
+void
+MagicMotion_SetCameraPosition(unsigned int camera_index, V3 position)
+{
+    magic_motion.sensor_frustums[camera_index].position = position;
+}
+
+void
+MagicMotion_SetCameraRotation(unsigned int camera_index, float pitch, float yaw, float roll)
+{
+    Frustum *f = magic_motion.sensor_frustums + camera_index;
+    f->pitch = pitch;
+    f->yaw = yaw;
+    f->roll = roll;
+}
+
+void
+MagicMotion_CaptureFrame(void)
+{
+    magic_motion.cloud_size = 0;
+    magic_motion.num_hitbox_events = 0;
+    
+    for(unsigned int i=0; i<magic_motion.num_hitboxes; ++i)
+    {
+        magic_motion.hitboxes[i].point_count = 0;
+    }
+    
+    for(unsigned int i=0; i<magic_motion.num_active_sensors; ++i)
+    {
+        SensorInfo *sensor = &magic_motion.sensors[i];
+        ColorPixel *colors = GetSensorColorFrame(sensor);
+        DepthPixel *depths = GetSensorDepthFrame(sensor);
+
+        MagicMotionTag tag = (MagicMotionTag)(TAG_CAMERA_0 + i);
+
+        const unsigned int w = sensor->depth_stream_info.width;
+        const unsigned int h = sensor->depth_stream_info.height;
+        const float fov = sensor->depth_stream_info.fov;
+        const float aspect = sensor->depth_stream_info.aspect_ratio;
+        
+        const Frustum f = magic_motion.sensor_frustums[i];
+        const Mat4 camera_transform = TransformMat4(f.position,
+                                                    (V3){ 1, 1, 1 },
+                                                    (V3){ f.pitch, f.yaw, f.roll });
+
+        for(unsigned int y=0; y<h; ++y)
+        {
+            for(unsigned int x=0; x<w; ++x)
+            {
+                float depth = depths[x+y*w];
+                if(depth > 0.0f)
+                {
+                    float pos_x = tanf((((float)x/(float)w)-0.5f)*fov) * depth;
+                    float pos_y = tanf((0.5f-((float)y / (float)h))*(fov/aspect)) * depth;
+
+                    // Convert from mm to dm as we create the point
+                    V3 point = MulMat4Vec3(camera_transform,
+                                           (V3){ pos_x / 100.0f, pos_y / 100.0f, depth / 100.0f });
+
+                    for(unsigned int j=0; j<magic_motion.num_hitboxes; ++j)
+                    {
+                        magic_motion.hitboxes[j].point_count += (int)MagicMotion_BoxVsV3(magic_motion.hitboxes[j], point);
+                    }
+                    
+                    ColorPixel c = colors[x+y*w];
+                    Color color;
+                    color.r = c.r;
+                    color.g = c.g;
+                    color.b = c.b;
+
+                    // Add to point clouds
+                    unsigned int index = magic_motion.cloud_size++;
+                    magic_motion.spatial_cloud[index] = point;
+                    magic_motion.color_cloud[index] = color;
+                    magic_motion.tag_cloud[index] = tag;
+                }
+            }
+        }
+    }
+    
+    for(unsigned int i=0; i<magic_motion.num_hitboxes; ++i)
+    {
+        if(magic_motion.hitboxes[i].point_count >= HITBOX_POINT_TRESHOLD &&
+           !magic_motion.hitboxes[i].considered_hit)
+        {
+            magic_motion.hitboxes[i].considered_hit = true;
+            magic_motion.hitbox_events[magic_motion.num_hitbox_events++] = (MagicMotionHitboxEvent){
+                .hitbox = (int)i,
+                .enter = true
+            };
+        }
+        else if(magic_motion.hitboxes[i].point_count == 0 &&
+                magic_motion.hitboxes[i].considered_hit)
+        {
+            magic_motion.hitboxes[i].considered_hit = false;
+            magic_motion.hitbox_events[magic_motion.num_hitbox_events++] = (MagicMotionHitboxEvent){
+                .hitbox = (int)i,
+                .enter = false
+            };
+        }
+    }
+}
+
+void
+MagicMotion_GetColorImageResolution(unsigned int camera_index, int *width, int *height)
+{
+    SensorInfo *sensor = &magic_motion.sensors[camera_index];
+    *width = sensor->color_stream_info.width;
+    *height = sensor->color_stream_info.height;
+}
+
+void
+MagicMotion_GetDepthImageResolution(unsigned int camera_index, int *width, int *height)
+{
+    SensorInfo *sensor = &magic_motion.sensors[camera_index];
+    *width = sensor->depth_stream_info.width;
+    *height = sensor->depth_stream_info.height;
+}
+
+const Color *
+MagicMotion_GetColorImage(unsigned int camera_index)
+{
+    return NULL;
+}
+
+const float *
+MagicMotion_GetDepthImage(unsigned int camera_index)
+{
+    return NULL;
+}
+
+unsigned int
+MagicMotion_GetCloudSize(void)
+{
+    return magic_motion.cloud_size;
+}
+
+V3 *
+MagicMotion_GetPositions(void)
+{
+    return magic_motion.spatial_cloud;
+}
+
+Color *
+MagicMotion_GetColors(void)
+{
+    return magic_motion.color_cloud;
+}
+
+MagicMotionTag *
+MagicMotion_GetTags(void)
+{
+    return magic_motion.tag_cloud;
+}
+
+int
+MagicMotion_RegisterHitbox(V3 pos, V3 size)
+{
+    int result = -1;
+    
+    if(magic_motion.num_hitboxes < MAX_HITBOXES)
+    {
+        magic_motion.hitboxes[magic_motion.num_hitboxes] = (Hitbox){ pos, size };
+        result = magic_motion.num_hitboxes++;
+    }
+    
+    return result;
+}
+
+void
+MagicMotion_UpdateHitbox(int hitbox, V3 pos, V3 size)
+{
+    magic_motion.hitboxes[hitbox].position = pos;
+    magic_motion.hitboxes[hitbox].size = size;
+}
+
+MagicMotionHitboxEvent *
+MagicMotion_QueryHitboxes(int *num_events)
+{
+    *num_events = magic_motion.num_hitbox_events;
+    return magic_motion.hitbox_events;
+}
 
 #ifdef __cplusplus
 }

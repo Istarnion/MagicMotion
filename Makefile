@@ -1,28 +1,30 @@
 CC=clang
+ifeq ($(shell uname),Darwin)
+	OS=macOS
+else
+	OS=Linux
+endif
 
-CFLAGS=-g $(shell sdl2-config --cflags) -I src -I imgui -I OpenNI/Include
-LIBS=$(shell sdl2-config --libs) -framework OpenGl -framework CoreFoundation -lc++ -L OpenNI/Redist -lOpenNI2
+OPENNI2_REDIST=/Users/istarnion/Google\ Drive/School/ntnu_spring2019/graphics/project/lib/OpenNI/Redist
 
-SRC=$(shell find src -name '*.cpp')
-HEADERS=$(shell find src -name '*.h')
+CFLAGS=-g $(shell sdl2-config --cflags) -I src -I imgui
+LIBS=-lSDL2 -L$(OPENNI2_REDIST) -lOpenNI2 -lMagicMotion -lc++
 
-EXE=launchpad
-SHARED_LIB=libMagicMotion.so
+ifeq (${OS},macOS)
+	LIBS += -framework OpenGl -framework CoreFoundation
+endif
 
-${EXE}: ${SRC} ${HEADERS} ${SHARED_LIB}
-	${CC} ${CFLAGS} src/main.cpp -o $@ ${LIBS}
+SRC=$(shell find launchpad -name '*.cpp')
+HEADERS=$(shell find launchpad -name '*.h')
 
-${SHARED_LIB}:
-	${CC} ${CFLAGS}
+EXE=magicmotion_test
+
+${EXE}: ${SRC} ${HEADERS} macOS/Build/Debug/libMagicMotion.dylib
+	cp macOS/Build/Debug/libMagicMotion.dylib ./
+	${CC} ${CFLAGS} launchpad/main.cpp -o $@ ${LIBS}
 
 .PHONY: clean
 clean:
 	rm -f ${EXE}
-	rm -f ${SHARED_LIB}
-
-.PHONY: test
-test:
-	${CC} ${CFLAGS} test.cpp -o test ${LIBS}
-	./test
-	@rm -f test
+	rm -rf macOS/Builds
 

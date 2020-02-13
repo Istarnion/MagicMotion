@@ -5,6 +5,7 @@
 #include "renderer.h"
 #include "ui.h"
 #include "utils.h"
+#include "config.h"
 
 namespace viewer
 {
@@ -41,6 +42,8 @@ namespace viewer
     bool
     SceneInit(void)
     {
+        const Config *config = GetConfig();
+
         cam.pitch = 0;
         cam.yaw = 3.1415f;
         cam.position = MakeV3(0, 0, 0);
@@ -53,9 +56,29 @@ namespace viewer
             active_sensors[i].frustum = frustums[i];
         }
 
-        num_boxes = 1;
-        boxes[0] = (Box){ (V3){ 10, 1.9f, -16.0f }, (V3){ 1.0f, 1.0f, 0.1f } };
-        MagicMotion_RegisterHitbox(boxes[0].position, boxes[0].size);
+        FILE *f = fopen(config->box_file, "r");
+        if(f)
+        {
+            fscanf(f, "%d\n", &num_boxes);
+            if(num_boxes > MAX_BOXES) num_boxes = MAX_BOXES;
+
+            for(int i=0; i<num_boxes; ++i)
+            {
+                fscanf(f, "%f,%f,%f|%f,%f,%f\n",
+                       &boxes[i].position.x, &boxes[i].position.y, &boxes[i].position.z,
+                       &boxes[i].size.x, &boxes[i].size.y, &boxes[i].size.z);
+            }
+        }
+        else
+        {
+            num_boxes = 1;
+            boxes[0] = (Box){ (V3){ 10, 1.9f, -16.0f }, (V3){ 1.0f, 1.0f, 0.1f } };
+        }
+
+        for(int i=0; i<num_boxes; ++i)
+        {
+            MagicMotion_RegisterHitbox(boxes[i].position, boxes[i].size);
+        }
 
         return true;
     }
@@ -151,15 +174,6 @@ namespace viewer
         MagicMotionHitboxEvent *events = MagicMotion_QueryHitboxes(&num_hitbox_events);
         for(int i=0; i<num_hitbox_events; ++i)
         {
-            if(events[i].enter)
-            {
-                system("afplay sounds/Yoink.wav &");
-            }
-            else
-            {
-                system("afplay sounds/Button.wav &");
-            }
-
             printf("Collision %s on hitbox %d\n", (events[i].enter?"enter":"exit"), events[i].hitbox);
         }
     }
@@ -167,6 +181,18 @@ namespace viewer
     void
     SceneEnd(void)
     {
+        FILE *f = fopen("boxes.ser", "w");
+        if(f)
+        {
+            fprintf(f, "%d\n", num_boxes);
+
+            for(int i=0; i<num_boxes; ++i)
+            {
+                fprintf(f, "%f,%f,%f|%f,%f,%f\n",
+                        boxes[i].position.x, boxes[i].position.y, boxes[i].position.z,
+                        boxes[i].size.x,     boxes[i].size.y,     boxes[i].size.z);
+            }
+        }
     }
 }
 

@@ -91,11 +91,15 @@ MagicMotion_Initialize(void)
         {
             if(strcmp(sensor->URI, serialized_sensors[j].URI) == 0)
             {
-                printf("Loading data for URI %s\n", sensor->URI);
-                magic_motion.sensor_frustums[i].position   = serialized_sensors[j].frustum.position;
-                magic_motion.sensor_frustums[i].pitch      = serialized_sensors[j].frustum.pitch;
-                magic_motion.sensor_frustums[i].yaw        = serialized_sensors[j].frustum.yaw;
-                magic_motion.sensor_frustums[i].roll       = serialized_sensors[j].frustum.roll;
+                printf("Loading data for URI %s:\n", sensor->URI);
+                Frustum f = serialized_sensors[j].frustum;
+                magic_motion.sensor_frustums[i].position   = f.position;
+                magic_motion.sensor_frustums[i].pitch      = f.pitch;
+                magic_motion.sensor_frustums[i].yaw        = f.yaw;
+                magic_motion.sensor_frustums[i].roll       = f.roll;
+                printf("\tpos: (%f, %f, %f), pitch: %f, yaw: %f, roll: %f\n",
+                       f.position.x, f.position.y, f.position.z,
+                       f.pitch, f.yaw, f.roll);
                 break;
             }
         }
@@ -111,7 +115,7 @@ MagicMotion_Initialize(void)
     magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity, sizeof(Color));
     
     printf("MagicMotion initialized with %u active sensors. Point cloud size: %u\n",
-           magic_motion.num_active_sensors, magic_motion.cloud_size);
+           magic_motion.num_active_sensors, magic_motion.cloud_capacity);
 }
 
 void
@@ -134,6 +138,18 @@ unsigned int
 MagicMotion_GetNumCameras(void)
 {
     return magic_motion.num_active_sensors;
+}
+
+const char *
+MagicMotion_GetCameraName(unsigned int camera_index)
+{
+    return magic_motion.sensors[camera_index].name;
+}
+
+const char *
+MagicMotion_GetCameraURI(unsigned int camera_index)
+{
+    return magic_motion.sensors[camera_index].URI;
 }
 
 const Frustum *
@@ -305,6 +321,8 @@ MagicMotion_RegisterHitbox(V3 pos, V3 size)
     {
         magic_motion.hitboxes[magic_motion.num_hitboxes] = (Hitbox){ pos, size };
         result = magic_motion.num_hitboxes++;
+        
+        printf("Registerd hitbox %d at (%f, %f, %f), size: (%f, %f, %f)\n", result, pos.x, pos.y, pos.z, size.x, size.y, size.z);
     }
     
     return result;

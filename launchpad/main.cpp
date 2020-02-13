@@ -1,6 +1,7 @@
 #include "ui.h"
 #include <stdio.h>
 #include <SDL.h>
+#include "config.cpp"
 #include "input.cpp"
 #include "files.cpp"
 #include "magic_motion.h"
@@ -12,6 +13,8 @@
 int
 main(int num_args, char *args[])
 {
+    ConfigInit(num_args, args);
+
     SDL_Init(SDL_INIT_EVERYTHING);
 
     MagicMotion_Initialize();

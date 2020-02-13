@@ -39,6 +39,8 @@ void MagicMotion_Initialize(void);
 void MagicMotion_Finalize(void);
 
 unsigned int MagicMotion_GetNumCameras(void);
+const char *MagicMotion_GetCameraName(unsigned int camera_index);
+const char *MagicMotion_GetCameraURI(unsigned int camera_index);
 const Frustum *MagicMotion_GetCameraFrustums(void);
 void MagicMotion_SetCameraPosition(unsigned int camera_index, V3 position);
 void MagicMotion_SetCameraRotation(unsigned int camera_index, float pitch, float yaw, float roll);

@@ -21,7 +21,7 @@ FPSCamera(InputState *input, Camera *cam, float dt)
 
     if(MagnitudeSquaredV3(camera_movement) > 0)
     {
-        float speed = (((bool)input->shift) ? 5.0f : 50.0f);
+        float speed = (((bool)input->shift) ? 50.0f : 5.0f);
         camera_movement = ScaleV3(NormalizeV3(camera_movement), speed * dt);
         MoveCamera(cam, camera_movement);
     }

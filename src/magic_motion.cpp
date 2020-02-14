@@ -36,20 +36,24 @@ static struct
     Hitbox hitboxes[MAX_HITBOXES];
     unsigned int num_hitboxes;
     
+    // TODO(istarnion): Consider changing this for an octtree or similar
+    V3 boundingbox_min;
+    V3 boundingbox_max;
+    
     MagicMotionHitboxEvent hitbox_events[MAX_HITBOX_EVENTS];
     unsigned int num_hitbox_events;
 } magic_motion;
 
 static bool
-MagicMotion_BoxVsV3(Hitbox b, V3 v)
+MagicMotion_BoxVsV3(V3 box_pos, V3 box_size, V3 v)
 {
-    float hw = b.size.x / 2.0f;
-    float hh = b.size.y / 2.0f;
-    float hd = b.size.z / 2.0f;
+    float hw = box_size.x / 2.0f;
+    float hh = box_size.y / 2.0f;
+    float hd = box_size.z / 2.0f;
     
-    return !(v.x < b.position.x - hw || v.x > b.position.x + hw ||
-             v.y < b.position.y - hh || v.y > b.position.y + hh ||
-             v.z < b.position.z - hd || v.z > b.position.z + hd);
+    return !(v.x < box_pos.x - hw || v.x > box_pos.x + hw ||
+             v.y < box_pos.y - hh || v.y > box_pos.y + hh ||
+             v.z < box_pos.z - hd || v.z > box_pos.z + hd);
 }
 
 void
@@ -216,9 +220,16 @@ MagicMotion_CaptureFrame(void)
                     V3 point = MulMat4Vec3(camera_transform,
                                            (V3){ pos_x / 100.0f, pos_y / 100.0f, depth / 100.0f });
 
-                    for(unsigned int j=0; j<magic_motion.num_hitboxes; ++j)
+                    if(!(point.x < magic_motion.boundingbox_min.x || point.x > magic_motion.boundingbox_max.x ||
+                         point.y < magic_motion.boundingbox_min.y || point.y > magic_motion.boundingbox_max.y ||
+                         point.z < magic_motion.boundingbox_min.z || point.z > magic_motion.boundingbox_max.z))
                     {
-                        magic_motion.hitboxes[j].point_count += (int)MagicMotion_BoxVsV3(magic_motion.hitboxes[j], point);
+                        for(unsigned int j=0; j<magic_motion.num_hitboxes; ++j)
+                        {
+                            magic_motion.hitboxes[j].point_count += (int)MagicMotion_BoxVsV3(magic_motion.hitboxes[j].position,
+                                                                                             magic_motion.hitboxes[j].size,
+                                                                                             point);
+                        }
                     }
                     
                     ColorPixel c = colors[x+y*w];
@@ -312,6 +323,40 @@ MagicMotion_GetTags(void)
     return magic_motion.tag_cloud;
 }
 
+static void
+_MagicMotion_CalcBoundingBox()
+{
+    magic_motion.boundingbox_min = (V3){ INFINITY, INFINITY, INFINITY };
+    magic_motion.boundingbox_max = (V3){ -INFINITY, -INFINITY, -INFINITY };
+    
+    for(int i=0; i<magic_motion.num_hitboxes; ++i)
+    {
+        V3 min = (V3){
+            magic_motion.hitboxes[i].position.x - magic_motion.hitboxes[i].size.x / 2.0f,
+            magic_motion.hitboxes[i].position.y - magic_motion.hitboxes[i].size.y / 2.0f,
+            magic_motion.hitboxes[i].position.z - magic_motion.hitboxes[i].size.z / 2.0f,
+        };
+        
+        V3 max = (V3){
+            magic_motion.hitboxes[i].position.x + magic_motion.hitboxes[i].size.x / 2.0f,
+            magic_motion.hitboxes[i].position.y + magic_motion.hitboxes[i].size.y / 2.0f,
+            magic_motion.hitboxes[i].position.z + magic_motion.hitboxes[i].size.z / 2.0f,
+        };
+        
+        if(min.x < magic_motion.boundingbox_min.x) magic_motion.boundingbox_min.x = min.x;
+        if(min.y < magic_motion.boundingbox_min.y) magic_motion.boundingbox_min.y = min.y;
+        if(min.z < magic_motion.boundingbox_min.z) magic_motion.boundingbox_min.z = min.z;
+        
+        if(max.x > magic_motion.boundingbox_max.x) magic_motion.boundingbox_max.x = max.x;
+        if(max.y > magic_motion.boundingbox_max.y) magic_motion.boundingbox_max.y = max.y;
+        if(max.z > magic_motion.boundingbox_max.z) magic_motion.boundingbox_max.z = max.z;
+    }
+    
+    printf("Min: (%f, %f, %f), Max: (%f, %f, %f)\n",
+           magic_motion.boundingbox_min.x, magic_motion.boundingbox_min.y, magic_motion.boundingbox_min.z,
+           magic_motion.boundingbox_max.x, magic_motion.boundingbox_max.y, magic_motion.boundingbox_max.z);
+}
+
 int
 MagicMotion_RegisterHitbox(V3 pos, V3 size)
 {
@@ -321,6 +366,8 @@ MagicMotion_RegisterHitbox(V3 pos, V3 size)
     {
         magic_motion.hitboxes[magic_motion.num_hitboxes] = (Hitbox){ pos, size };
         result = magic_motion.num_hitboxes++;
+    
+        _MagicMotion_CalcBoundingBox();
         
         printf("Registerd hitbox %d at (%f, %f, %f), size: (%f, %f, %f)\n", result, pos.x, pos.y, pos.z, size.x, size.y, size.z);
     }
@@ -333,6 +380,7 @@ MagicMotion_UpdateHitbox(int hitbox, V3 pos, V3 size)
 {
     magic_motion.hitboxes[hitbox].position = pos;
     magic_motion.hitboxes[hitbox].size = size;
+    _MagicMotion_CalcBoundingBox();
 }
 
 MagicMotionHitboxEvent *

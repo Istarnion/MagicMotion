@@ -10,6 +10,7 @@
 namespace viewer
 {
     #define MAX_BOXES 16
+    #define MAX_PARTICLES 128
 
     typedef struct
     {
@@ -26,6 +27,13 @@ namespace viewer
         V3 size;
     } Box;
 
+    typedef struct
+    {
+        V3 position;
+        V3 velocity;
+        float time_to_live;
+    } Particle;
+
     static const V3 colors[] = {
         (V3){ 1, 0, 0 },
         (V3){ 0, 1, 0 },
@@ -37,7 +45,35 @@ namespace viewer
     static Box boxes[MAX_BOXES];
     static int num_boxes;
 
+    static Particle particles[MAX_PARTICLES];
+
     static Camera cam;
+
+    void
+    ParticleBurst(V3 origin)
+    {
+        int start_index = 0;
+        for(int i=0; i<MAX_PARTICLES; ++i)
+        {
+            if(particles[i].time_to_live <= 0)
+            {
+                start_index = i;
+                break;
+            }
+        }
+
+        for(int i=start_index; i<start_index+16; ++i)
+        {
+            int index = i % MAX_PARTICLES;
+            V3 dir = NormalizeV3(SubV3(cam.position, origin));
+            dir.x += ((float)rand() / (float)RAND_MAX) - 0.5f;
+            dir.y += ((float)rand() / (float)RAND_MAX) - 0.5f;
+            dir.z *= 2.0f;
+            particles[index].position = origin;
+            particles[index].time_to_live = 2.0f;
+            particles[index].velocity = ScaleV3(dir, 10.0f);
+        }
+    }
 
     bool
     SceneInit(void)
@@ -175,6 +211,21 @@ namespace viewer
         for(int i=0; i<num_hitbox_events; ++i)
         {
             printf("Collision %s on hitbox %d\n", (events[i].enter?"enter":"exit"), events[i].hitbox);
+            if(events[i].enter)
+            {
+                ParticleBurst(boxes[events[i].hitbox].position);
+            }
+        }
+
+        for(int i=0; i<MAX_PARTICLES; ++i)
+        {
+            if(particles[i].time_to_live > 0)
+            {
+                particles[i].velocity = AddV3(particles[i].velocity, ScaleV3((V3){ 0, -20.0f, 0 }, dt));
+                particles[i].position = AddV3(particles[i].position, ScaleV3(particles[i].velocity, dt));
+                particles[i].time_to_live -= dt;
+                RenderCube(particles[i].position, (V3){ 0.1f, 0.1f, 0.1f });
+            }
         }
     }
 

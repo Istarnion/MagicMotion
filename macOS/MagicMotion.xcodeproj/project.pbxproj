@@ -35,7 +35,7 @@
 		7268914123E1A89600555BAD /* magic_motion.h in Headers */ = {isa = PBXBuildFile; fileRef = 7268910E23E1A89600555BAD /* magic_motion.h */; };
 		7268914223E1A89600555BAD /* magic_math.h in Headers */ = {isa = PBXBuildFile; fileRef = 7268910F23E1A89600555BAD /* magic_math.h */; };
 		7268914523E1A89600555BAD /* sensor_serialization.h in Headers */ = {isa = PBXBuildFile; fileRef = 7268911223E1A89600555BAD /* sensor_serialization.h */; };
-		7268914723E1A8BA00555BAD /* libOpenNI2.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 726890CC23E1A89600555BAD /* libOpenNI2.dylib */; };
+		72E094AE23FC20C9002F0293 /* libOpenNI2.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 726890CE23E1A89600555BAD /* libOpenNI2.dylib */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -112,6 +112,8 @@
 		7268911023E1A89600555BAD /* octree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = octree.cpp; sourceTree = "<group>"; };
 		7268911123E1A89600555BAD /* sensor_serialization.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sensor_serialization.cpp; sourceTree = "<group>"; };
 		7268911223E1A89600555BAD /* sensor_serialization.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sensor_serialization.h; sourceTree = "<group>"; };
+		72E094A723FC0AC1002F0293 /* librealsense2.2.32.1.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = librealsense2.2.32.1.dylib; path = ../../../../Dev/librealsense/build/Debug/librealsense2.2.32.1.dylib; sourceTree = "<group>"; };
+		72E094AA23FC1DB5002F0293 /* libOpenNI2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libOpenNI2.dylib; path = ../libOpenNI2.dylib; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -119,7 +121,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7268914723E1A8BA00555BAD /* libOpenNI2.dylib in Frameworks */,
+				72E094AE23FC20C9002F0293 /* libOpenNI2.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -318,6 +320,8 @@
 		7268914623E1A8BA00555BAD /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				72E094AA23FC1DB5002F0293 /* libOpenNI2.dylib */,
+				72E094A723FC0AC1002F0293 /* librealsense2.2.32.1.dylib */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -473,6 +477,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				"LIBRARY_SEARCH_PATHS[arch=*]" = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.14;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -541,9 +546,15 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				EXECUTABLE_PREFIX = lib;
+				"HEADER_SEARCH_PATHS[arch=*]" = /Users/istarnion/Dev/librealsense/include;
 				INFOPLIST_FILE = "$(SRCROOT)/Info.plist";
+				"LIBRARY_SEARCH_PATHS[arch=*]" = (
+					/Users/istarnion/Google,
+					Drive/School/MagicMotion/OpenNI/Redist,
+				);
 				MARKETING_VERSION = 0.1;
-				OTHER_LDFLAGS = "-L../OpenNI";
+				"OTHER_CPLUSPLUSFLAGS[arch=*]" = "$(OTHER_CFLAGS)-DSENSOR_OPENNI";
+				OTHER_LDFLAGS = "-L\"/Users/istarnion/Google\\ Drive/School/MagicMotion\"";
 				PRODUCT_BUNDLE_IDENTIFIER = no.ablemagic.magicmotion;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -559,9 +570,15 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				EXECUTABLE_PREFIX = lib;
+				"HEADER_SEARCH_PATHS[arch=*]" = /Users/istarnion/Dev/librealsense/include;
 				INFOPLIST_FILE = "$(SRCROOT)/Info.plist";
+				"LIBRARY_SEARCH_PATHS[arch=*]" = (
+					/Users/istarnion/Google,
+					Drive/School/MagicMotion/OpenNI/Redist,
+				);
 				MARKETING_VERSION = 0.1;
-				OTHER_LDFLAGS = "-L../OpenNI";
+				"OTHER_CPLUSPLUSFLAGS[arch=*]" = "$(OTHER_CFLAGS)-DSENSOR_OPENNI";
+				OTHER_LDFLAGS = "-L\"/Users/istarnion/Google\\ Drive/School/MagicMotion\"";
 				PRODUCT_BUNDLE_IDENTIFIER = no.ablemagic.magicmotion;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

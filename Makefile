@@ -5,10 +5,10 @@ else
 	OS=Linux
 endif
 
-OPENNI2_REDIST=/Users/istarnion/Google\ Drive/School/ntnu_spring2019/graphics/project/lib/OpenNI/Redist
+OPENNI2_REDIST=/Users/istarnion/Google\ Drive/School/MagicMotion/OpenNI/Redist
 
 CFLAGS=-g $(shell sdl2-config --cflags) -I src -I imgui
-LIBS=-lSDL2 -L$(OPENNI2_REDIST) -lOpenNI2 -lMagicMotion -lc++
+LIBS=-lSDL2 -lOpenNI2 -lMagicMotion -lc++
 
 ifeq (${OS},macOS)
 	LIBS += -framework OpenGl -framework CoreFoundation

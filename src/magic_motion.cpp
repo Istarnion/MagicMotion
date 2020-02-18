@@ -1,4 +1,11 @@
-#include "sensor_interface.cpp"
+#include <string.h>
+
+#ifdef SENSOR_REALSENSE
+#include "sensor_interface_realsense.cpp"
+#else
+#include "sensor_interface_openni.cpp"
+#endif
+
 #include "sensor_serialization.cpp"
 
 #include "magic_motion.h"
@@ -120,6 +127,25 @@ MagicMotion_Initialize(void)
     
     printf("MagicMotion initialized with %u active sensors. Point cloud size: %u\n",
            magic_motion.num_active_sensors, magic_motion.cloud_capacity);
+    
+    FILE *f = fopen("boxes.ser", "r");
+    if(f)
+    {
+        int num_boxes = 0;
+        fscanf(f, "%d\n", &num_boxes);
+        if(num_boxes > MAX_HITBOXES) num_boxes = MAX_HITBOXES;
+
+        for(int i=0; i<num_boxes; ++i)
+        {
+            V3 position;
+            V3 size;
+            fscanf(f, "%f,%f,%f|%f,%f,%f\n",
+                   &position.x, &position.y, &position.z,
+                   &size.x,     &size.y,     &size.z);
+            
+            MagicMotion_RegisterHitbox(position, size);
+        }
+    }
 }
 
 void

@@ -4,8 +4,10 @@ test.dSYM/
 magicmotion_test.dSYM/
 sensors.ser
 sensors.ser*
+boxes.ser
+boxes.ser*
 OpenNI/
 OpenNI2/
-libOpenNI2.dylib
-libMagicMotion.dylib
+libOpenNI2.*
+libMagicMotion.*
 macOS/Build/

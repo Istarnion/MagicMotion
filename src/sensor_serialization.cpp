@@ -36,7 +36,7 @@ SaveSensor(const char *uri, Frustum *frustum)
 
     if(f)
     {
-        fprintf(f, "%d %s\n%d %f %f %f\n%d %f %f %f\n%d %f %f\n%d\n",
+        fprintf(f, "%d %s\n%d %.3f %.3f %.3f\n%d %.3f %.3f %.3f\n%d %.3f %.3f\n%d\n",
                 PERSIST_FIELD_URI, uri,
                 PERSIST_FIELD_FRUSTUM_POS, frustum->position.x, frustum->position.y, frustum->position.z,
                 PERSIST_FIELD_FRUSTUM_ROT, frustum->pitch, frustum->yaw, frustum->roll,
@@ -92,6 +92,7 @@ LoadSensors(SerializedSensor *sensors, int max_sensors)
                             sensor->URI = (char *)malloc(128);
                             fscanf(f, " %127s\n", sensor->URI);
                             sensor->URI[127] = '\0';
+                            printf("Read sensor URI: %s\n", sensor->URI);
                             break;
                         }
                         case PERSIST_FIELD_FRUSTUM_POS:
@@ -100,6 +101,8 @@ LoadSensors(SerializedSensor *sensors, int max_sensors)
                                    &sensor->frustum.position.x,
                                    &sensor->frustum.position.y,
                                    &sensor->frustum.position.z);
+                            printf("Read frustum pos: %.3f %.3f %.3f\n",
+                                   sensor->frustum.position.x, sensor->frustum.position.y, sensor->frustum.position.z);
                             break;
                         }
                         case PERSIST_FIELD_FRUSTUM_ROT:
@@ -108,6 +111,7 @@ LoadSensors(SerializedSensor *sensors, int max_sensors)
                                    &sensor->frustum.pitch,
                                    &sensor->frustum.yaw,
                                    &sensor->frustum.roll);
+                            puts("Read frustum rot");
                             break;
                         }
                         case PERSIST_FIELD_FRUSTUM_PLANES:
@@ -115,10 +119,12 @@ LoadSensors(SerializedSensor *sensors, int max_sensors)
                             fscanf(f, " %f %f\n",
                                    &sensor->frustum.near_plane,
                                    &sensor->frustum.far_plane);
+                            puts("Read frustum planes");
                             break;
                         }
                         case PERSIST_FIELD_END:
                         {
+                            puts("Read sensor end");
                             reading = false;
                         }
                         default: break;

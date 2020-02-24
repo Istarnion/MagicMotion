@@ -18,7 +18,7 @@ main()
 {
     point_color = v_color;
     gl_Position = MVP * vec4(v_position, 1.0);
-    gl_PointSize = 2.0;//map(gl_Position.z, 10.0, 5000.0, 50.0, 2.0);
+    gl_PointSize = 3.0; //map(gl_Position.z, 10.0, 5000.0, 50.0, 2.0);
 }
 
 #else

@@ -9,7 +9,7 @@
 
 namespace viewer
 {
-    #define MAX_BOXES 16
+    #define MAX_BOXES 128
     #define MAX_PARTICLES 128
 
     typedef struct
@@ -105,16 +105,6 @@ namespace viewer
                        &boxes[i].size.x, &boxes[i].size.y, &boxes[i].size.z);
             }
         }
-        else
-        {
-            num_boxes = 1;
-            boxes[0] = (Box){ (V3){ 10, 1.9f, -16.0f }, (V3){ 1.0f, 1.0f, 0.1f } };
-        }
-
-        for(int i=0; i<num_boxes; ++i)
-        {
-            MagicMotion_RegisterHitbox(boxes[i].position, boxes[i].size);
-        }
 
         return true;
     }
@@ -158,6 +148,11 @@ namespace viewer
 
                 ImGui::InputFloat3("Position", (float *)&boxes[i].position);
                 ImGui::InputFloat3("Size", (float *)&boxes[i].size);
+                if(ImGui::Button("Mark"))
+                {
+                    ParticleBurst(boxes[i].position);
+                }
+
                 ImGui::Spacing();
 
                 ImGui::PopID();

@@ -63,6 +63,11 @@ MagicMotion_Initialize(void)
 
     SerializedSensor serialized_sensors[MAX_SENSORS];
     int num_serialized_sensors = LoadSensors(serialized_sensors, MAX_SENSORS);
+    printf("Loaded %d sensor configs:\n", num_serialized_sensors);
+    for(int i=0; i<num_serialized_sensors; ++i)
+    {
+        printf("\t%s\n", serialized_sensors[i].URI);
+    }
 
     magic_motion.cloud_size = 0;
     magic_motion.cloud_capacity = 0;
@@ -106,6 +111,10 @@ MagicMotion_Initialize(void)
                        f.pitch, f.yaw, f.roll);
                 break;
             }
+            else
+            {
+                printf("Failed to load sensor config: %s did not match %s\n", sensor->URI, serialized_sensors[j].URI);
+            }
         }
     }
 
@@ -117,6 +126,25 @@ MagicMotion_Initialize(void)
     magic_motion.spatial_cloud = (V3 *)calloc(magic_motion.cloud_capacity, sizeof(V3));
     magic_motion.tag_cloud = (MagicMotionTag *)calloc(magic_motion.cloud_capacity, sizeof(MagicMotionTag));
     magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity, sizeof(Color));
+
+    FILE *f = fopen("boxes.ser", "r");
+    if(f)
+    {
+        int num_boxes = 0;
+        fscanf(f, "%d\n", &num_boxes);
+        if(num_boxes > MAX_HITBOXES) num_boxes = MAX_HITBOXES;
+
+        for(int i=0; i<num_boxes; ++i)
+        {
+            V3 pos;
+            V3 size;
+            fscanf(f, "%f,%f,%f|%f,%f,%f\n",
+                   &pos.x,  &pos.y,  &pos.z,
+                   &size.x, &size.y, &size.z);
+
+            MagicMotion_RegisterHitbox(pos, size);
+        }
+    }
     
     printf("MagicMotion initialized with %u active sensors. Point cloud size: %u\n",
            magic_motion.num_active_sensors, magic_motion.cloud_capacity);

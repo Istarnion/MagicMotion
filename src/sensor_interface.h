@@ -25,6 +25,7 @@ typedef struct
 
     char name[128];
     char URI[128];
+    char serial[64];
     char vendor[128];
     Sensor *sensor_data;
 } SensorInfo;

@@ -7,11 +7,11 @@
 extern "C" {
 #endif
 
-#define MAX_HITBOXES 32
-#define MAX_HITBOX_EVENTS 16
+#define MAX_HITBOXES 128
+#define MAX_HITBOX_EVENTS 32
 
 // How many points needs to be inside a hitbox to be considered a hit?
-#define HITBOX_POINT_TRESHOLD 8
+#define HITBOX_POINT_TRESHOLD 16
 
 typedef struct
 {
@@ -32,14 +32,14 @@ static struct
     MagicMotionTag *tag_cloud;
     unsigned int cloud_size;
     unsigned int cloud_capacity;
-    
+
     Hitbox hitboxes[MAX_HITBOXES];
     unsigned int num_hitboxes;
-    
+
     // TODO(istarnion): Consider changing this for an octtree or similar
     V3 boundingbox_min;
     V3 boundingbox_max;
-    
+
     MagicMotionHitboxEvent hitbox_events[MAX_HITBOX_EVENTS];
     unsigned int num_hitbox_events;
 } magic_motion;
@@ -50,7 +50,7 @@ MagicMotion_BoxVsV3(V3 box_pos, V3 box_size, V3 v)
     float hw = box_size.x / 2.0f;
     float hh = box_size.y / 2.0f;
     float hd = box_size.z / 2.0f;
-    
+
     return !(v.x < box_pos.x - hw || v.x > box_pos.x + hw ||
              v.y < box_pos.y - hh || v.y > box_pos.y + hh ||
              v.z < box_pos.z - hd || v.z > box_pos.z + hd);
@@ -64,10 +64,6 @@ MagicMotion_Initialize(void)
     SerializedSensor serialized_sensors[MAX_SENSORS];
     int num_serialized_sensors = LoadSensors(serialized_sensors, MAX_SENSORS);
     printf("Loaded %d sensor configs:\n", num_serialized_sensors);
-    for(int i=0; i<num_serialized_sensors; ++i)
-    {
-        printf("\t%s\n", serialized_sensors[i].URI);
-    }
 
     magic_motion.cloud_size = 0;
     magic_motion.cloud_capacity = 0;
@@ -98,9 +94,9 @@ MagicMotion_Initialize(void)
 
         for(int j=0; j<num_serialized_sensors; ++j)
         {
-            if(strcmp(sensor->URI, serialized_sensors[j].URI) == 0)
+            if(strcmp(sensor->serial, serialized_sensors[j].serial) == 0)
             {
-                printf("Loading data for URI %s:\n", sensor->URI);
+                printf("Loading data for sensor %s:\n", sensor->serial);
                 Frustum f = serialized_sensors[j].frustum;
                 magic_motion.sensor_frustums[i].position   = f.position;
                 magic_motion.sensor_frustums[i].pitch      = f.pitch;
@@ -113,16 +109,11 @@ MagicMotion_Initialize(void)
             }
             else
             {
-                printf("Failed to load sensor config: %s did not match %s\n", sensor->URI, serialized_sensors[j].URI);
+                printf("Failed to load sensor config: %s did not match %s\n", sensor->serial, serialized_sensors[j].serial);
             }
         }
     }
 
-    for(int i=0; i<num_serialized_sensors; ++i)
-    {
-        free(serialized_sensors[i].URI);
-    }
-    
     magic_motion.spatial_cloud = (V3 *)calloc(magic_motion.cloud_capacity, sizeof(V3));
     magic_motion.tag_cloud = (MagicMotionTag *)calloc(magic_motion.cloud_capacity, sizeof(MagicMotionTag));
     magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity, sizeof(Color));
@@ -145,7 +136,7 @@ MagicMotion_Initialize(void)
             MagicMotion_RegisterHitbox(pos, size);
         }
     }
-    
+
     printf("MagicMotion initialized with %u active sensors. Point cloud size: %u\n",
            magic_motion.num_active_sensors, magic_motion.cloud_capacity);
 }
@@ -156,10 +147,10 @@ MagicMotion_Finalize(void)
     free(magic_motion.color_cloud);
     free(magic_motion.tag_cloud);
     free(magic_motion.spatial_cloud);
-    
+
     for(int i=0; i<magic_motion.num_active_sensors; ++i)
     {
-        SaveSensor(magic_motion.sensors[i].URI, &magic_motion.sensor_frustums[i]);
+        SaveSensor(magic_motion.sensors[i].serial, &magic_motion.sensor_frustums[i]);
         SensorFinalize(&magic_motion.sensors[i]);
     }
 
@@ -182,6 +173,12 @@ const char *
 MagicMotion_GetCameraURI(unsigned int camera_index)
 {
     return magic_motion.sensors[camera_index].URI;
+}
+
+const char *
+MagicMotion_GetCameraSerialNumber(unsigned int camera_index)
+{
+    return magic_motion.sensors[camera_index].serial;
 }
 
 const Frustum *
@@ -210,12 +207,12 @@ MagicMotion_CaptureFrame(void)
 {
     magic_motion.cloud_size = 0;
     magic_motion.num_hitbox_events = 0;
-    
+
     for(unsigned int i=0; i<magic_motion.num_hitboxes; ++i)
     {
         magic_motion.hitboxes[i].point_count = 0;
     }
-    
+
     for(unsigned int i=0; i<magic_motion.num_active_sensors; ++i)
     {
         SensorInfo *sensor = &magic_motion.sensors[i];
@@ -228,7 +225,7 @@ MagicMotion_CaptureFrame(void)
         const unsigned int h = sensor->depth_stream_info.height;
         const float fov = sensor->depth_stream_info.fov;
         const float aspect = sensor->depth_stream_info.aspect_ratio;
-        
+
         const Frustum f = magic_motion.sensor_frustums[i];
         const Mat4 camera_transform = TransformMat4(f.position,
                                                     (V3){ 1, 1, 1 },
@@ -259,7 +256,7 @@ MagicMotion_CaptureFrame(void)
                                                                                              point);
                         }
                     }
-                    
+
                     ColorPixel c = colors[x+y*w];
                     Color color;
                     color.r = c.r;
@@ -275,7 +272,7 @@ MagicMotion_CaptureFrame(void)
             }
         }
     }
-    
+
     for(unsigned int i=0; i<magic_motion.num_hitboxes; ++i)
     {
         if(magic_motion.hitboxes[i].point_count >= HITBOX_POINT_TRESHOLD &&
@@ -356,7 +353,7 @@ _MagicMotion_CalcBoundingBox()
 {
     magic_motion.boundingbox_min = (V3){ INFINITY, INFINITY, INFINITY };
     magic_motion.boundingbox_max = (V3){ -INFINITY, -INFINITY, -INFINITY };
-    
+
     for(int i=0; i<magic_motion.num_hitboxes; ++i)
     {
         V3 min = (V3){
@@ -364,22 +361,22 @@ _MagicMotion_CalcBoundingBox()
             magic_motion.hitboxes[i].position.y - magic_motion.hitboxes[i].size.y / 2.0f,
             magic_motion.hitboxes[i].position.z - magic_motion.hitboxes[i].size.z / 2.0f,
         };
-        
+
         V3 max = (V3){
             magic_motion.hitboxes[i].position.x + magic_motion.hitboxes[i].size.x / 2.0f,
             magic_motion.hitboxes[i].position.y + magic_motion.hitboxes[i].size.y / 2.0f,
             magic_motion.hitboxes[i].position.z + magic_motion.hitboxes[i].size.z / 2.0f,
         };
-        
+
         if(min.x < magic_motion.boundingbox_min.x) magic_motion.boundingbox_min.x = min.x;
         if(min.y < magic_motion.boundingbox_min.y) magic_motion.boundingbox_min.y = min.y;
         if(min.z < magic_motion.boundingbox_min.z) magic_motion.boundingbox_min.z = min.z;
-        
+
         if(max.x > magic_motion.boundingbox_max.x) magic_motion.boundingbox_max.x = max.x;
         if(max.y > magic_motion.boundingbox_max.y) magic_motion.boundingbox_max.y = max.y;
         if(max.z > magic_motion.boundingbox_max.z) magic_motion.boundingbox_max.z = max.z;
     }
-    
+
     printf("Min: (%f, %f, %f), Max: (%f, %f, %f)\n",
            magic_motion.boundingbox_min.x, magic_motion.boundingbox_min.y, magic_motion.boundingbox_min.z,
            magic_motion.boundingbox_max.x, magic_motion.boundingbox_max.y, magic_motion.boundingbox_max.z);
@@ -389,17 +386,17 @@ int
 MagicMotion_RegisterHitbox(V3 pos, V3 size)
 {
     int result = -1;
-    
+
     if(magic_motion.num_hitboxes < MAX_HITBOXES)
     {
         magic_motion.hitboxes[magic_motion.num_hitboxes] = (Hitbox){ pos, size };
         result = magic_motion.num_hitboxes++;
-    
+
         _MagicMotion_CalcBoundingBox();
-        
+
         printf("Registerd hitbox %d at (%f, %f, %f), size: (%f, %f, %f)\n", result, pos.x, pos.y, pos.z, size.x, size.y, size.z);
     }
-    
+
     return result;
 }
 

@@ -38,7 +38,7 @@ void
 FinalizeSensorInterface(void)
 {
     puts("Shutting down OpenNI2..");
-    
+
     openni::OpenNI::shutdown();
     puts("Done.");
 }
@@ -65,6 +65,10 @@ PollSensorList(SensorInfo *sensor_list, int max_sensors)
         strncpy(sensor_list[i].vendor, device.getVendor(), sizeof(sensor_list[i].vendor));
         if(!sensor_list[i].vendor[0]) strcpy(sensor_list[i].name, "[UNKNOWN VENDOR]");
         sensor_list[i].vendor[sizeof(sensor_list[i].vendor)-1] = '\0';
+
+        memset(sensor_list[i].serial, 0, sizeof(sensor_list[i].serial));
+
+        sensor_list[i].sensor_data = NULL;
     }
 
     return num_sensors;
@@ -77,7 +81,7 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
     assert(s);
     sensor->sensor_data = s;
 
-    printf("Initializing sensor %s\n", sensor->URI);
+    printf("Initializing sensor at %s\n", sensor->URI);
 
     openni::Status rc;
     rc = s->oni_device.open(sensor->URI);
@@ -91,6 +95,10 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
     }
 
     puts("Successfully initialized the device");
+
+    int size = sizeof(sensor->serial);
+    s->oni_device.getProperty(openni::DEVICE_PROPERTY_SERIAL_NUMBER, sensor->serial, &size);
+    printf("Serial number: %s\n", sensor->serial);
 
     if(enable_color)
     {
@@ -183,7 +191,7 @@ SensorFinalize(SensorInfo *sensor)
 {
     if(sensor->sensor_data)
     {
-        printf("Finalizing sensor %s\n", sensor->URI);
+        printf("Finalizing sensor %s\n", sensor->serial);
 
         if(sensor->sensor_data->color_frame)
         {

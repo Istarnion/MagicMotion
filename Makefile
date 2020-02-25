@@ -9,12 +9,10 @@ CFLAGS=-g $(shell sdl2-config --cflags) -I src -I imgui
 LIBS=-lSDL2 -L$(OPENNI2_REDIST) -lOpenNI2 -lMagicMotion -lm
 
 ifeq (${OS},macOS)
-	OPENNI2_REDIST=/Users/istarnion/Google\ Drive/School/ntnu_spring2019/graphics/project/lib/OpenNI/Redist
 	LIBS += -lc++ -framework OpenGl -framework CoreFoundation
 	MAGICMOTION=libMagicMotion.dylib
 	MAGICMOTION_PATH=macOS/Build/Debug
 else
-	OPENNI2_REDIST=/home/ablemagic/Documents/2-Linux/OpenNI-Linux-x64-2.3/Redist
 	LIBS += -L. -lstdc++ -Wl,-rpath,.
 	MAGICMOTION=libMagicMotion.so
 	MAGICMOTION_PATH=linux
@@ -26,6 +24,8 @@ HEADERS=$(shell find launchpad -name '*.h')
 EXE=magicmotion_test
 
 ${EXE}: ${SRC} ${HEADERS} ${MAGICMOTION}
+	cp -R ${OPENNI2_REDIST}/OpenNI2 ./
+	cp ${OPENNI2_REDIST}/libOpenNI2.* ./
 	${CC} ${CFLAGS} launchpad/main.cpp -o $@ ${LIBS}
 
 ${MAGICMOTION}: ${MAGICMOTION_PATH}/${MAGICMOTION}

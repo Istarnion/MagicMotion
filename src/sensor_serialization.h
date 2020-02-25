@@ -5,7 +5,7 @@
 
 typedef struct
 {
-    char *URI;
+    char serial[64];
     Frustum frustum;
 } SerializedSensor;
 

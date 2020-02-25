@@ -24,7 +24,7 @@ main(int num_args, char *args[])
     Scene scene = GetViewerScene();
     scene.Init();
 
-    RendererInit("Code", 800, 600);
+    RendererInit("MagicMotion", 800, 600);
 
     const size_t max_num_frametime_samples = 512;
     Uint64 frametime_samples[max_num_frametime_samples];

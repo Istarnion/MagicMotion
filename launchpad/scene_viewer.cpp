@@ -89,7 +89,7 @@ namespace viewer
         const Config *config = GetConfig();
 
         cam.pitch = 0;
-        cam.yaw = 3.1415f;
+        cam.yaw = 0;
         cam.position = MakeV3(0, 0, 0);
         CameraLookAt(&cam, MakeV3(0, 0, 0));
 

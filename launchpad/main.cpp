@@ -26,6 +26,8 @@ main(int num_args, char *args[])
 
     RendererInit("MagicMotion", 800, 600);
 
+    puts("Got past render init");
+
     const size_t max_num_frametime_samples = 512;
     Uint64 frametime_samples[max_num_frametime_samples];
     memset(frametime_samples, 0, sizeof(frametime_samples));

@@ -174,7 +174,7 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
         // Try to enable image registration mode if supported
         if(enable_color && s->oni_device.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
         {
-            printf("Enabling image registration mode on %s\n", sensor->name);
+            printf("Enabling image registration mode on %s (%s)\n", sensor->name, sensor->serial);
             s->oni_device.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
         }
     }

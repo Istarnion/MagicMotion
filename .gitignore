@@ -2,12 +2,9 @@ magicmotion_test
 imgui.ini
 test.dSYM/
 magicmotion_test.dSYM/
-sensors.ser
-sensors.ser*
-boxes.ser
-boxes.ser*
+*.ser
 OpenNI/
 OpenNI2/
-libOpenNI2.*
-libMagicMotion.*
+*.so
+*.dylib
 macOS/Build/

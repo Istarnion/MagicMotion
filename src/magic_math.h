@@ -7,8 +7,8 @@
 extern "C" {
 #endif
 
-#define RADIANS(d) ((float)(d) * (M_PI / 180.0f))
-#define DEGREES(r) ((float)(r) * (180.0f / M_PI))
+#define RADIANS(d) ((float)(d) * ((float)M_PI / 180.0f))
+#define DEGREES(r) ((float)(r) * (180.0f / (float)M_PI))
 
 #define EPSILON 0.001f
 #define EQUAL_FLOAT(a, b) (fabs((a) - (b)) < EPSILON)
@@ -395,6 +395,29 @@ TransformMat4(V3 pos, V3 scale, V3 euler)
     // TODO(istarnion): Inline this!
     Mat4 result = MulMat4(MulMat4(s, r), t);
     return result;
+}
+
+void
+DecomposeMat4(const Mat4 &m, V3 *pos, V3 *rot, V3 *scale)
+{
+    if(pos)
+    {
+        pos->x = m.f30;
+        pos->y = m.f31;
+        pos->z = m.f32;
+    }
+
+    if(rot)
+    {
+        // TODO(istarnion): Implement!
+    }
+
+    if(scale)
+    {
+        scale->x = m.f00;
+        scale->y = m.f11;
+        scale->z = m.f22;
+    }
 }
 
 #ifdef __cplusplus

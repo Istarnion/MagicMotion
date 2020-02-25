@@ -5,8 +5,7 @@
 
 typedef struct
 {
-    V3 position;
-    float pitch, yaw, roll;
+    Mat4 transform;
     float fov;
     float aspect;
     float near_plane;

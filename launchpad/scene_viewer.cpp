@@ -145,20 +145,15 @@ namespace viewer
                 SensorRenderData *s = &active_sensors[i];
                 if(ImGui::Begin(s->name))
                 {
-                    float *pos = (float *)&s->frustum.position;
-                    float scale[] = { 0, 0, 0 };
-                    float rotation[] = {
-                        DEGREES(-s->frustum.pitch),
-                        DEGREES(-s->frustum.yaw),
-                        DEGREES(-s->frustum.roll)
-                    };
-
-                    float transform[4*4];
-                    ImGuizmo::RecomposeMatrixFromComponents(pos, rotation, scale,
-                                                            transform);
-
                     ImGuizmo::OPERATION gizmo_operation;
                     ImGuizmo::MODE gizmo_mode;
+
+                    float pos[3];
+                    float rotation[3];
+                    float scale[3];
+
+                    ImGuizmo::DecomposeMatrixToComponents(s->frustum.transform.v,
+                                                          pos, rotation, scale);
 
                     if(s->manipulation_mode == MANIPULATE_POSITION)
                     {
@@ -168,7 +163,7 @@ namespace viewer
                     }
                     else if(s->manipulation_mode == MANIPULATE_ROTATION)
                     {
-                        ImGui::InputFloat2("Rotation", rotation, 0, 2.0f*M_PI);
+                        ImGui::InputFloat3("Rotation", rotation, 0, 2.0f*M_PI);
                         gizmo_operation = ImGuizmo::ROTATE;
                         gizmo_mode = ImGuizmo::LOCAL;
                     }
@@ -185,24 +180,14 @@ namespace viewer
 
                     ImGui::Checkbox("Frustum", &s->show_frustum);
 
+                    ImGuizmo::RecomposeMatrixFromComponents(pos, rotation, scale,
+                                                            s->frustum.transform.v);
 
                     ImGuizmo::Manipulate(view->v, proj->v,
                                          gizmo_operation, gizmo_mode,
-                                         transform);
+                                         s->frustum.transform.v);
 
-                    ImGuizmo::DecomposeMatrixToComponents(transform,
-                                                          pos, rotation, scale);
-
-                    s->frustum.position.x = pos[0];
-                    s->frustum.position.y = pos[1];
-                    s->frustum.position.z = pos[2];
-
-                    s->frustum.pitch = RADIANS(-rotation[0]);
-                    s->frustum.yaw   = RADIANS(-rotation[1]);
-                    s->frustum.roll  = RADIANS(-rotation[2]);
-
-                    MagicMotion_SetCameraPosition(i, s->frustum.position);
-                    MagicMotion_SetCameraRotation(i, s->frustum.pitch, s->frustum.yaw, s->frustum.roll);
+                    MagicMotion_SetCameraTransform(i, s->frustum.transform);
                 }
 
                 ImGui::End();

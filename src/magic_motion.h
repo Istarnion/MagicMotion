@@ -43,8 +43,7 @@ const char *MagicMotion_GetCameraName(unsigned int camera_index);
 const char *MagicMotion_GetCameraURI(unsigned int camera_index);
 const char *MagicMotion_GetCameraSerialNumber(unsigned int camera_index);
 const Frustum *MagicMotion_GetCameraFrustums(void);
-void MagicMotion_SetCameraPosition(unsigned int camera_index, V3 position);
-void MagicMotion_SetCameraRotation(unsigned int camera_index, float pitch, float yaw, float roll);
+void MagicMotion_SetCameraTransform(unsigned int camera_index, Mat4 transform);
 
 void MagicMotion_CaptureFrame(void);
 

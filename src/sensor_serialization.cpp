@@ -9,8 +9,7 @@ typedef enum
 {
     PERSIST_FIELD_END,
     PERSIST_FIELD_SERIAL,
-    PERSIST_FIELD_FRUSTUM_POS,
-    PERSIST_FIELD_FRUSTUM_ROT,
+    PERSIST_FIELD_FRUSTUM_TRANS,
     PERSIST_FIELD_FRUSTUM_PLANES
 } PersistFieldHeader;
 
@@ -36,10 +35,20 @@ SaveSensor(const char *serial, Frustum *frustum)
 
     if(f)
     {
-        fprintf(f, "%d %s\n%d %.3f %.3f %.3f\n%d %.3f %.3f %.3f\n%d %.3f %.3f\n%d\n",
+        float *t = frustum->transform.v;
+
+        fprintf(f, "%d %s\n"
+                   "%d %.3f %.3f %.3f %.3f "
+                      "%.3f %.3f %.3f %.3f "
+                      "%.3f %.3f %.3f %.3f "
+                      "%.3f %.3f %.3f %.3f\n"
+                   "%d %.3f %.3f\n"
+                   "%d\n",
                 PERSIST_FIELD_SERIAL, serial,
-                PERSIST_FIELD_FRUSTUM_POS, frustum->position.x, frustum->position.y, frustum->position.z,
-                PERSIST_FIELD_FRUSTUM_ROT, frustum->pitch, frustum->yaw, frustum->roll,
+                PERSIST_FIELD_FRUSTUM_TRANS, t[0],   t[1],  t[2],  t[3],
+                                             t[4],   t[5],  t[6],  t[7],
+                                             t[8],   t[9], t[10], t[11],
+                                             t[12], t[13], t[14], t[15],
                 PERSIST_FIELD_FRUSTUM_PLANES, frustum->near_plane, frustum->far_plane,
                 PERSIST_FIELD_END);
 
@@ -94,23 +103,18 @@ LoadSensors(SerializedSensor *sensors, int max_sensors)
                             printf("Read sensor serial: %s\n", sensor->serial);
                             break;
                         }
-                        case PERSIST_FIELD_FRUSTUM_POS:
+                        case PERSIST_FIELD_FRUSTUM_TRANS:
                         {
-                            fscanf(f, " %f %f %f\n",
-                                   &sensor->frustum.position.x,
-                                   &sensor->frustum.position.y,
-                                   &sensor->frustum.position.z);
-                            printf("Read frustum pos: %.3f %.3f %.3f\n",
-                                   sensor->frustum.position.x, sensor->frustum.position.y, sensor->frustum.position.z);
-                            break;
-                        }
-                        case PERSIST_FIELD_FRUSTUM_ROT:
-                        {
-                            fscanf(f, " %f %f %f\n",
-                                   &sensor->frustum.pitch,
-                                   &sensor->frustum.yaw,
-                                   &sensor->frustum.roll);
-                            puts("Read frustum rot");
+                            float *t = sensor->frustum.transform.v;
+                            fscanf(f, " %f %f %f %f "
+                                       "%f %f %f %f "
+                                       "%f %f %f %f "
+                                       "%f %f %f %f\n",
+                                   &t[0],   &t[1],  &t[2],  &t[3],
+                                   &t[4],   &t[5],  &t[6],  &t[7],
+                                   &t[8],   &t[9], &t[10], &t[11],
+                                   &t[12], &t[13], &t[14], &t[15]);
+                            puts("Read frustum transform");
                             break;
                         }
                         case PERSIST_FIELD_FRUSTUM_PLANES:

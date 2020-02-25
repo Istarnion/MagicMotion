@@ -401,9 +401,7 @@ RenderFrustum(const Frustum *frustum)
         {  vf.x,  vf.y, vf.z }
     };
 
-    Mat4 model_matrix = TransformMat4(frustum->position,
-                                      (V3){ 1, 1, 1 },
-                                      (V3){ frustum->pitch, frustum->yaw, frustum->roll });
+    Mat4 model_matrix = frustum->transform;
     Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
 
     glBindBuffer(GL_ARRAY_BUFFER, frustum_data.vertex_buffer);

@@ -86,10 +86,7 @@ MagicMotion_Initialize(void)
         }
 
         magic_motion.sensor_frustums[i] = (Frustum){
-            .position = (V3){ 0, 0, 0 },
-            .pitch = 0,
-            .yaw = 0,
-            .roll = 0,
+            .transform = IdentityMat4(),
             .fov = sensor->depth_stream_info.fov,
             .aspect = sensor->depth_stream_info.aspect_ratio,
             .near_plane = MAX(0.05f, sensor->depth_stream_info.min_depth / 100.0f),
@@ -105,13 +102,7 @@ MagicMotion_Initialize(void)
             {
                 printf("Loading data for sensor %s:\n", sensor->serial);
                 Frustum f = serialized_sensors[j].frustum;
-                magic_motion.sensor_frustums[i].position   = f.position;
-                magic_motion.sensor_frustums[i].pitch      = f.pitch;
-                magic_motion.sensor_frustums[i].yaw        = f.yaw;
-                magic_motion.sensor_frustums[i].roll       = f.roll;
-                printf("\tpos: (%f, %f, %f), pitch: %f, yaw: %f, roll: %f\n",
-                       f.position.x, f.position.y, f.position.z,
-                       f.pitch, f.yaw, f.roll);
+                magic_motion.sensor_frustums[i].transform  = f.transform;
                 break;
             }
             else
@@ -195,18 +186,9 @@ MagicMotion_GetCameraFrustums(void)
 }
 
 void
-MagicMotion_SetCameraPosition(unsigned int camera_index, V3 position)
+MagicMotion_SetCameraTransform(unsigned int camera_index, Mat4 transform)
 {
-    magic_motion.sensor_frustums[camera_index].position = position;
-}
-
-void
-MagicMotion_SetCameraRotation(unsigned int camera_index, float pitch, float yaw, float roll)
-{
-    Frustum *f = magic_motion.sensor_frustums + camera_index;
-    f->pitch = pitch;
-    f->yaw = yaw;
-    f->roll = roll;
+    magic_motion.sensor_frustums[camera_index].transform = transform;
 }
 
 void
@@ -234,9 +216,7 @@ MagicMotion_CaptureFrame(void)
         const float aspect = sensor->depth_stream_info.aspect_ratio;
 
         const Frustum f = magic_motion.sensor_frustums[i];
-        const Mat4 camera_transform = TransformMat4(f.position,
-                                                    (V3){ 1, 1, 1 },
-                                                    (V3){ f.pitch, f.yaw, f.roll });
+        const Mat4 camera_transform = f.transform;
 
         for(unsigned int y=0; y<h; ++y)
         {

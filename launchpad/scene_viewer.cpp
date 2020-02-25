@@ -12,8 +12,16 @@ namespace viewer
     #define MAX_BOXES 128
     #define MAX_PARTICLES 128
 
+    typedef enum
+    {
+        MANIPULATE_POSITION,
+        MANIPULATE_ROTATION
+    } SensorManipulationMode;
+
     typedef struct
     {
+        char name[128];
+        SensorManipulationMode manipulation_mode;
         Frustum frustum;
         bool colorize;
         bool show_frustum;
@@ -90,6 +98,10 @@ namespace viewer
         for(int i=0; i<num_active_sensors; ++i)
         {
             active_sensors[i].frustum = frustums[i];
+
+            snprintf(active_sensors[i].name, 128, "%s (%s)",
+                     MagicMotion_GetCameraName(i),
+                     MagicMotion_GetCameraSerialNumber(i));
         }
 
         FILE *f = fopen(config->box_file, "r");
@@ -114,31 +126,89 @@ namespace viewer
     {
         UpdateProjectionMatrix();
 
-        if(ImGui::Begin("Sensors"))
+        InputState *input = Input();
+        FPSCamera(input, &cam, dt);
+        RendererSetViewMatrix(CameraGetViewMatrix(&cam));
+
+        // Edit sensor stuff:
         {
+            Mat4 *view = RendererGetViewMatrix();
+            Mat4 *proj = RendererGetProjectionMatrix();
+
+            ImGuiIO &io = ImGui::GetIO();
+            ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+
             for(int i=0; i<num_active_sensors; ++i)
             {
                 ImGui::PushID(i);
 
                 SensorRenderData *s = &active_sensors[i];
-                if(ImGui::CollapsingHeader("Camera"))
+                if(ImGui::Begin(s->name))
                 {
-                    ImGui::InputFloat3("Position", (float *)&s->frustum.position);
-                    ImGui::SliderFloat("Pitch", &s->frustum.pitch, 0, 2.0f*M_PI);
-                    ImGui::SliderFloat("Yaw", &s->frustum.yaw, 0, 2.0f*M_PI);
-                    ImGui::SliderFloat("Roll", &s->frustum.roll, 0, 2.0f*M_PI);
-                    ImGui::Checkbox("Colorize", &s->colorize);
+                    float *pos = (float *)&s->frustum.position;
+                    float scale[] = { 0, 0, 0 };
+                    float rotation[] = {
+                        DEGREES(-s->frustum.pitch),
+                        DEGREES(-s->frustum.yaw),
+                        DEGREES(-s->frustum.roll)
+                    };
+
+                    float transform[4*4];
+                    ImGuizmo::RecomposeMatrixFromComponents(pos, rotation, scale,
+                                                            transform);
+
+                    ImGuizmo::OPERATION gizmo_operation;
+                    ImGuizmo::MODE gizmo_mode;
+
+                    if(s->manipulation_mode == MANIPULATE_POSITION)
+                    {
+                        ImGui::InputFloat3("Position", pos);
+                        gizmo_operation = ImGuizmo::TRANSLATE;
+                        gizmo_mode = ImGuizmo::WORLD;
+                    }
+                    else if(s->manipulation_mode == MANIPULATE_ROTATION)
+                    {
+                        ImGui::InputFloat2("Rotation", rotation, 0, 2.0f*M_PI);
+                        gizmo_operation = ImGuizmo::ROTATE;
+                        gizmo_mode = ImGuizmo::LOCAL;
+                    }
+
+                    ImGui::RadioButton("Translate",
+                                       (int *)&s->manipulation_mode,
+                                       MANIPULATE_POSITION);
+
+                    ImGui::SameLine();
+
+                    ImGui::RadioButton("Rotate",
+                                       (int *)&s->manipulation_mode,
+                                       MANIPULATE_ROTATION);
+
                     ImGui::Checkbox("Frustum", &s->show_frustum);
+
+
+                    ImGuizmo::Manipulate(view->v, proj->v,
+                                         gizmo_operation, gizmo_mode,
+                                         transform);
+
+                    ImGuizmo::DecomposeMatrixToComponents(transform,
+                                                          pos, rotation, scale);
+
+                    s->frustum.position.x = pos[0];
+                    s->frustum.position.y = pos[1];
+                    s->frustum.position.z = pos[2];
+
+                    s->frustum.pitch = RADIANS(-rotation[0]);
+                    s->frustum.yaw   = RADIANS(-rotation[1]);
+                    s->frustum.roll  = RADIANS(-rotation[2]);
 
                     MagicMotion_SetCameraPosition(i, s->frustum.position);
                     MagicMotion_SetCameraRotation(i, s->frustum.pitch, s->frustum.yaw, s->frustum.roll);
                 }
 
+                ImGui::End();
                 ImGui::PopID();
             }
         }
-
-        ImGui::End();
 
         if(ImGui::Begin("Boxes"))
         {
@@ -167,12 +237,6 @@ namespace viewer
         }
 
         ImGui::End();
-
-        InputState *input = Input();
-
-        FPSCamera(input, &cam, dt);
-
-        RendererSetViewMatrix(CameraGetViewMatrix(&cam));
 
         RenderCube((V3){ 0, 0, 0 }, (V3){ 1, 1, 1 });
 

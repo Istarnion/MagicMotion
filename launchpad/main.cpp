@@ -43,6 +43,7 @@ main(int num_args, char *args[])
         {
             ImGui_ImplSDL2_ProcessEvent(&e);
             ImGuiIO &io = ImGui::GetIO();
+            io.ConfigWindowsMoveFromTitleBarOnly = true;
 
             switch(e.type)
             {

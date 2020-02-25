@@ -255,6 +255,7 @@ RendererClear(void)
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(window);
     ImGui::NewFrame();
+    ImGuizmo::BeginFrame();
 }
 
 void
@@ -293,6 +294,18 @@ RendererSetProjectionMatrix(Mat4 p)
 {
     projection_matrix = p;
     projection_view_matrix = MulMat4(view_matrix, projection_matrix);
+}
+
+Mat4 *
+RendererGetViewMatrix(void)
+{
+    return &view_matrix;
+}
+
+Mat4 *
+RendererGetProjectionMatrix(void)
+{
+    return &projection_matrix;
 }
 
 void

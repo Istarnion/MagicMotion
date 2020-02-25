@@ -11,6 +11,8 @@ void RendererUpdateSize(void);
 void RendererGetSize(int *width, int *height);
 void RendererSetViewMatrix(Mat4 v);
 void RendererSetProjectionMatrix(Mat4 p);
+Mat4 *RendererGetViewMatrix(void);
+Mat4 *RendererGetProjectionMatrix(void);
 
 void RenderWireCube(V3 center, V3 size);
 void RenderCube(V3 center, V3 size);

@@ -15,10 +15,10 @@ extern "C" {
 #endif
 
 #define MAX_HITBOXES 128
-#define MAX_HITBOX_EVENTS 32
+#define MAX_HITBOX_EVENTS 64
 
 // How many points needs to be inside a hitbox to be considered a hit?
-#define HITBOX_POINT_TRESHOLD 16
+#define HITBOX_POINT_TRESHOLD 8
 
 typedef struct
 {
@@ -102,7 +102,7 @@ MagicMotion_Initialize(void)
             {
                 printf("Loading data for sensor %s:\n", sensor->serial);
                 Frustum f = serialized_sensors[j].frustum;
-                magic_motion.sensor_frustums[i].transform  = f.transform;
+                magic_motion.sensor_frustums[i] = f;
                 break;
             }
             else
@@ -116,24 +116,7 @@ MagicMotion_Initialize(void)
     magic_motion.tag_cloud = (MagicMotionTag *)calloc(magic_motion.cloud_capacity, sizeof(MagicMotionTag));
     magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity, sizeof(Color));
 
-    FILE *f = fopen("boxes.ser", "r");
-    if(f)
-    {
-        int num_boxes = 0;
-        fscanf(f, "%d\n", &num_boxes);
-        if(num_boxes > MAX_HITBOXES) num_boxes = MAX_HITBOXES;
-
-        for(int i=0; i<num_boxes; ++i)
-        {
-            V3 pos;
-            V3 size;
-            fscanf(f, "%f,%f,%f|%f,%f,%f\n",
-                   &pos.x,  &pos.y,  &pos.z,
-                   &size.x, &size.y, &size.z);
-
-            MagicMotion_RegisterHitbox(pos, size);
-        }
-    }
+    MagicMotion_ReloadBoxes();
 
     printf("MagicMotion initialized with %u active sensors. Point cloud size: %u\n",
            magic_motion.num_active_sensors, magic_motion.cloud_capacity);
@@ -153,6 +136,30 @@ MagicMotion_Finalize(void)
     }
 
     FinalizeSensorInterface();
+}
+
+void
+MagicMotion_ReloadBoxes(void)
+{
+    FILE *f = fopen("boxes.ser", "r");
+    if(f)
+    {
+        magic_motion.num_hitboxes = 0;
+        int num_boxes = 0;
+        fscanf(f, "%d\n", &num_boxes);
+        if(num_boxes > MAX_HITBOXES) num_boxes = MAX_HITBOXES;
+
+        for(int i=0; i<num_boxes; ++i)
+        {
+            V3 pos;
+            V3 size;
+            fscanf(f, "%f,%f,%f|%f,%f,%f\n",
+                   &pos.x,  &pos.y,  &pos.z,
+                   &size.x, &size.y, &size.z);
+
+            MagicMotion_RegisterHitbox(pos, size);
+        }
+    }
 }
 
 unsigned int
@@ -183,6 +190,12 @@ const Frustum *
 MagicMotion_GetCameraFrustums(void)
 {
     return magic_motion.sensor_frustums;
+}
+
+Mat4
+MagicMotion_GetCameraTransform(unsigned int camera_index)
+{
+    return magic_motion.sensor_frustums[camera_index].transform;
 }
 
 void

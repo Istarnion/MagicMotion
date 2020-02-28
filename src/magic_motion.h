@@ -38,11 +38,14 @@ typedef struct
 void MagicMotion_Initialize(void);
 void MagicMotion_Finalize(void);
 
+void MagicMotion_ReloadBoxes(void);
+
 unsigned int MagicMotion_GetNumCameras(void);
 const char *MagicMotion_GetCameraName(unsigned int camera_index);
 const char *MagicMotion_GetCameraURI(unsigned int camera_index);
 const char *MagicMotion_GetCameraSerialNumber(unsigned int camera_index);
 const Frustum *MagicMotion_GetCameraFrustums(void);
+Mat4 MagicMotion_GetCameraTransform(unsigned int camera_index);
 void MagicMotion_SetCameraTransform(unsigned int camera_index, Mat4 transform);
 
 void MagicMotion_CaptureFrame(void);

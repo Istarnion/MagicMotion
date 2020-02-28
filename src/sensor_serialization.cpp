@@ -10,6 +10,7 @@ typedef enum
     PERSIST_FIELD_END,
     PERSIST_FIELD_SERIAL,
     PERSIST_FIELD_FRUSTUM_TRANS,
+    PERSIST_FIELD_FOV,
     PERSIST_FIELD_FRUSTUM_PLANES
 } PersistFieldHeader;
 
@@ -35,13 +36,14 @@ SaveSensor(const char *serial, Frustum *frustum)
 
     if(f)
     {
-        float *t = frustum->transform.v;
+        uint32_t *t = (uint32_t *)frustum->transform.v;
 
         fprintf(f, "%d %s\n"
-                   "%d %.3f %.3f %.3f %.3f "
-                      "%.3f %.3f %.3f %.3f "
-                      "%.3f %.3f %.3f %.3f "
-                      "%.3f %.3f %.3f %.3f\n"
+                   "%d %u %u %u %u "
+                      "%u %u %u %u "
+                      "%u %u %u %u "
+                      "%u %u %u %u\n"
+                   "%d %.3f\n"
                    "%d %.3f %.3f\n"
                    "%d\n",
                 PERSIST_FIELD_SERIAL, serial,
@@ -49,6 +51,7 @@ SaveSensor(const char *serial, Frustum *frustum)
                                              t[4],   t[5],  t[6],  t[7],
                                              t[8],   t[9], t[10], t[11],
                                              t[12], t[13], t[14], t[15],
+                PERSIST_FIELD_FOV, frustum->fov,
                 PERSIST_FIELD_FRUSTUM_PLANES, frustum->near_plane, frustum->far_plane,
                 PERSIST_FIELD_END);
 
@@ -105,16 +108,22 @@ LoadSensors(SerializedSensor *sensors, int max_sensors)
                         }
                         case PERSIST_FIELD_FRUSTUM_TRANS:
                         {
-                            float *t = sensor->frustum.transform.v;
-                            fscanf(f, " %f %f %f %f "
-                                       "%f %f %f %f "
-                                       "%f %f %f %f "
-                                       "%f %f %f %f\n",
+                            uint32_t *t = (uint32_t *)sensor->frustum.transform.v;
+                            fscanf(f, " %u %u %u %u"
+                                      " %u %u %u %u"
+                                      " %u %u %u %u"
+                                      " %u %u %u %u\n",
                                    &t[0],   &t[1],  &t[2],  &t[3],
                                    &t[4],   &t[5],  &t[6],  &t[7],
                                    &t[8],   &t[9], &t[10], &t[11],
                                    &t[12], &t[13], &t[14], &t[15]);
                             puts("Read frustum transform");
+                            break;
+                        }
+                        case PERSIST_FIELD_FOV:
+                        {
+                            fscanf(f, " %f\n",
+                                   &sensor->frustum.fov);
                             break;
                         }
                         case PERSIST_FIELD_FRUSTUM_PLANES:

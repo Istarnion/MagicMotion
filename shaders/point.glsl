@@ -7,12 +7,6 @@ uniform mat4 MVP;
 
 out vec3 point_color;
 
-float
-map(float value, float min1, float max1, float min2, float max2) {
-    float t = (value-min1) / (max1-min1);
-    return clamp(min2*(1.0-t) + max2*t, min(min2, max2), max(min2, max2));
-}
-
 void
 main()
 {

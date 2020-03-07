@@ -242,8 +242,8 @@ namespace viewer
         {
             Box *box = &boxes[selected_box];
 
-	    ImGui::InputFloat3("Position", (float *)&box->position);
-	    ImGui::InputFloat3("Size", (float *)&box->size);
+	        ImGui::InputFloat3("Position", (float *)&box->position);
+	        ImGui::InputFloat3("Size", (float *)&box->size);
 
             Mat4 transform = TranslationMat4(box->position);
 
@@ -252,6 +252,7 @@ namespace viewer
                                  transform.v);
 
             DecomposeMat4(transform, &box->position, NULL, NULL);
+            MagicMotion_UpdateHitbox(selected_box, box->position, box->size);
         }
 
         ImGui::End();

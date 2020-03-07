@@ -15,10 +15,10 @@ extern "C" {
 #endif
 
 #define MAX_HITBOXES 128
-#define MAX_HITBOX_EVENTS 64
+#define MAX_HITBOX_EVENTS 128
 
 // How many points needs to be inside a hitbox to be considered a hit?
-#define HITBOX_POINT_TRESHOLD 8
+#define HITBOX_POINT_TRESHOLD 14
 
 typedef struct
 {

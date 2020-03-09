@@ -1,7 +1,16 @@
 #include "magic_motion.h" // Color
 #include <stdio.h>
 
-#ifdef __cplusplus__
+
+#define MINIZ_NO_STDIO
+#define MINIZ_NO_TIME
+#define MINIZ_NO_ARCHIVE_APIS
+#define MINIZ_NO_ARCHIVE_WRITING_APIS
+#define MINIZ_NO_ZLIB_APIS
+#define MINIZ_NO_ZLIB_COMPATIBLE_NAMES
+#include "miniz.c"
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -26,7 +35,7 @@ StartVideoRecording(const char *file)
         {
             result = recorder;
             result->frame_count = 0;
-            result->file = fopen(file, "w");
+            result->file = fopen(file, "wb");
             if(result->file == NULL || ferror(result->file))
             {
                 result->file = NULL;
@@ -43,22 +52,27 @@ StartVideoRecording(const char *file)
 void
 StopRecording(VideoRecorder *recorder)
 {
-    fprintf(recorder->file, "nframes %d\n", recorder->frame_count);
+    fwrite(&recorder->frame_count, sizeof(size_t), 1);
     fclose(recorder->file);
     recorder->file = NULL;
     recorder->frame_count = 0;
+}
+
+static void
+CompressAndWriteData(FILE *f, void *data, size_t size)
+{
+    size_t compressed_size;
+    void *compressed_data = tdefl_compress_mem_to_heap(data, size, &compressed_size, 0);
+    fwrite(&compressed_size, sizeof(size_t), 1);
+    fwrite(compressed_data, 1, compressed_size);
 }
 
 void
 WriteVideoFrame(VideoRecorder *recorder, size_t n_points, V3 *xyz, Color *rgb)
 {
     ++recorder->frame_count;
-    fprintf(recorder->file, "npoints %d\n", n_points);
-    for(size_t i=0; i<n_points; ++i)
-    {
-        fprintf(recorder->file, "%f %f %f #%06X\n",
-                n_points, xyz.x, xyz.y, xyz.z, rgb.color);
-    }
+    CompressAndWriteData(recorder->file, xyz, n_points*sizeof(V3));
+    CompressAndWriteData(recorder->file, rgb, n_points*sizeof(Color));
 }
 
 #ifdef __cplusplus__

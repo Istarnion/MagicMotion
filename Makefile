@@ -6,7 +6,7 @@ else
 	OS=Linux
 endif
 
-CFLAGS=-g $(shell sdl2-config --cflags) -I src -I imgui -I ImGuizmo -std=c++11
+CFLAGS=-g $(shell sdl2-config --cflags) -I src -I imgui -I ImGuizmo -I miniz -std=c++11
 LIBS=-lSDL2 -L$(OPENNI2_REDIST) -lOpenNI2 -lMagicMotion -lm
 
 ifeq (${OS},macOS)

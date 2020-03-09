@@ -12,7 +12,7 @@ main()
 {
     point_color = v_color;
     gl_Position = MVP * vec4(v_position, 1.0);
-    gl_PointSize = max(1.0, 10.0 - gl_Position.z * 0.1); // map(-gl_Position.w, 500.0, 1.0, 50.0, 2.0);
+    gl_PointSize = max(1.0, 10.0 - gl_Position.z * 0.1);
 }
 
 #else

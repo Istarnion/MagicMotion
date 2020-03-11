@@ -6,6 +6,7 @@
 #include "ui.h"
 #include "utils.h"
 #include "config.h"
+#include "video_recorder.h"
 
 namespace viewer
 {
@@ -59,6 +60,22 @@ namespace viewer
     static Particle particles[MAX_PARTICLES];
 
     static Camera cam;
+
+    static VideoRecorder *video_recorder;
+
+    enum UIMode
+    {
+        UI_CAMERA,
+        UI_BOXES
+    };
+
+    static struct
+    {
+        UIMode mode;
+        bool video_window_open;
+        char recording_filename[128];
+        bool is_recording;
+    } UI;
 
     void
     ParticleBurst(V3 origin)
@@ -141,6 +158,8 @@ namespace viewer
         selected_sensor = 0;
         gizmo_mode = ImGuizmo::LOCAL;
 
+        strcpy(UI.recording_filename, "recording.vid");
+
         return true;
     }
 
@@ -153,18 +172,25 @@ namespace viewer
         FPSCamera(input, &cam, dt);
         RendererSetViewMatrix(CameraGetViewMatrix(&cam));
 
-        // Edit sensor stuff:
-        if(ImGui::Begin("Sensors"))
+        ImGui::BeginMainMenuBar();
+        if(ImGui::BeginMenu("Tools"))
         {
-            for(int i=0; i<num_active_sensors; ++i)
+            if(ImGui::MenuItem("Camera Mode", NULL, UI.mode == UI_CAMERA))
             {
-                ImGui::PushID(i);
-                ImGui::RadioButton(active_sensors[i].name, &selected_sensor, i);
-                ImGui::PopID();
+                UI.mode = UI_CAMERA;
             }
+
+            if(ImGui::MenuItem("Box Mode", NULL, UI.mode == UI_BOXES))
+            {
+                UI.mode = UI_BOXES;
+            }
+
+            ImGui::MenuItem("Video Recording", NULL, &UI.video_window_open);
+
+            ImGui::EndMenu();
         }
 
-        ImGui::End();
+        ImGui::EndMainMenuBar();
 
         Mat4 *view = RendererGetViewMatrix();
         Mat4 *proj = RendererGetProjectionMatrix();
@@ -172,90 +198,135 @@ namespace viewer
         ImGuiIO &io = ImGui::GetIO();
         ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
 
-        SensorRenderData *s = &active_sensors[selected_sensor];
-        if(ImGui::Begin("Inspector"))
+        // Edit sensor stuff:
+        if(UI.mode == UI_CAMERA)
         {
-            ImGuizmo::OPERATION gizmo_operation;
-
-            float pos[3];
-            float rotation[3];
-            float scale[3];
-
-            ImGuizmo::DecomposeMatrixToComponents(s->frustum.transform.v,
-                                                  pos, rotation, scale);
-
-            if(s->manipulation_mode == MANIPULATE_POSITION)
+            if(ImGui::Begin("Scene"))
             {
-                gizmo_operation = ImGuizmo::TRANSLATE;
-            }
-            else if(s->manipulation_mode == MANIPULATE_ROTATION)
-            {
-                gizmo_operation = ImGuizmo::ROTATE;
+                for(int i=0; i<num_active_sensors; ++i)
+                {
+                    ImGui::PushID(i);
+                    ImGui::RadioButton(active_sensors[i].name, &selected_sensor, i);
+                    ImGui::PopID();
+                }
             }
 
-            ImGui::InputFloat3("Position", pos);
-            ImGui::InputFloat3("Rotation", rotation);
-            ImGui::RadioButton("Translate",
-                               (int *)&s->manipulation_mode,
-                               MANIPULATE_POSITION);
+            ImGui::End();
 
-            ImGui::SameLine();
-
-            ImGui::RadioButton("Rotate",
-                               (int *)&s->manipulation_mode,
-                               MANIPULATE_ROTATION);
-
-            ImGui::RadioButton("Local", (int *)&gizmo_mode,
-                                        (int)ImGuizmo::LOCAL);
-            ImGui::SameLine();
-            ImGui::RadioButton("World", (int *)&gizmo_mode,
-                                        (int)ImGuizmo::WORLD);
-
-            ImGui::Checkbox("Frustum", &s->show_frustum);
-
-            ImGuizmo::RecomposeMatrixFromComponents(pos, rotation, scale,
-                                                    s->frustum.transform.v);
-
-            ImGuizmo::Manipulate(view->v, proj->v,
-                                 gizmo_operation, gizmo_mode,
-                                 s->frustum.transform.v);
-
-            MagicMotion_SetCameraTransform(selected_sensor, s->frustum.transform);
-        }
-
-        ImGui::End();
-
-        // Boxes!
-        if(ImGui::Begin("Boxes"))
-        {
-            for(int i=0; i<num_boxes; ++i)
+            SensorRenderData *s = &active_sensors[selected_sensor];
+            if(ImGui::Begin("Inspector"))
             {
-                ImGui::PushID(i);
-                ImGui::RadioButton("Box", &selected_box, i);
-                ImGui::PopID();
+                ImGuizmo::OPERATION gizmo_operation;
+
+                float pos[3];
+                float rotation[3];
+                float scale[3];
+
+                ImGuizmo::DecomposeMatrixToComponents(s->frustum.transform.v,
+                                                      pos, rotation, scale);
+
+                if(s->manipulation_mode == MANIPULATE_POSITION)
+                {
+                    gizmo_operation = ImGuizmo::TRANSLATE;
+                }
+                else if(s->manipulation_mode == MANIPULATE_ROTATION)
+                {
+                    gizmo_operation = ImGuizmo::ROTATE;
+                }
+
+                ImGui::InputFloat3("Position", pos);
+                ImGui::InputFloat3("Rotation", rotation);
+                ImGui::RadioButton("Translate",
+                                   (int *)&s->manipulation_mode,
+                                   MANIPULATE_POSITION);
+
+                ImGui::SameLine();
+
+                ImGui::RadioButton("Rotate",
+                                   (int *)&s->manipulation_mode,
+                                   MANIPULATE_ROTATION);
+
+                ImGui::RadioButton("Local", (int *)&gizmo_mode,
+                                            (int)ImGuizmo::LOCAL);
+                ImGui::SameLine();
+                ImGui::RadioButton("World", (int *)&gizmo_mode,
+                                            (int)ImGuizmo::WORLD);
+
+                ImGui::Checkbox("Frustum", &s->show_frustum);
+
+                ImGuizmo::RecomposeMatrixFromComponents(pos, rotation, scale,
+                                                        s->frustum.transform.v);
+
+                ImGuizmo::Manipulate(view->v, proj->v,
+                                     gizmo_operation, gizmo_mode,
+                                     s->frustum.transform.v);
+
+                MagicMotion_SetCameraTransform(selected_sensor, s->frustum.transform);
             }
+
+            ImGui::End();
         }
-
-        ImGui::End();
-
-        if(ImGui::Begin("Box Inspector"))
+        else if(UI.mode == UI_BOXES)
         {
-            Box *box = &boxes[selected_box];
+            // Boxes!
+            if(ImGui::Begin("Scene"))
+            {
+                for(int i=0; i<num_boxes; ++i)
+                {
+                    ImGui::PushID(i);
+                    ImGui::RadioButton("Box", &selected_box, i);
+                    ImGui::PopID();
+                }
+            }
 
-            ImGui::InputFloat3("Position", (float *)&box->position);
-            ImGui::InputFloat3("Size", (float *)&box->size);
+            ImGui::End();
 
-            Mat4 transform = TranslationMat4(box->position);
+            if(ImGui::Begin("Inspector"))
+            {
+                Box *box = &boxes[selected_box];
 
-            ImGuizmo::Manipulate(view->v, proj->v,
-                    ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
-                    transform.v);
+                ImGui::InputFloat3("Position", (float *)&box->position);
+                ImGui::InputFloat3("Size", (float *)&box->size);
 
-            DecomposeMat4(transform, &box->position, NULL, NULL);
-            MagicMotion_UpdateHitbox(selected_box, box->position, box->size);
+                Mat4 transform = TranslationMat4(box->position);
+
+                ImGuizmo::Manipulate(view->v, proj->v,
+                        ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
+                        transform.v);
+
+                DecomposeMat4(transform, &box->position, NULL, NULL);
+                MagicMotion_UpdateHitbox(selected_box, box->position, box->size);
+            }
+
+            ImGui::End();
         }
 
-        ImGui::End();
+        if(UI.video_window_open)
+        {
+            ImGui::Begin("Video Recording", &UI.video_window_open);
+
+            ImGui::InputText("File", UI.recording_filename, 128);
+
+            if(!UI.is_recording)
+            {
+                if(ImGui::Button("Start recording"))
+                {
+                    video_recorder = StartVideoRecording(UI.recording_filename);
+                    UI.is_recording = true;
+                }
+            }
+            else
+            {
+                if(ImGui::Button("Stop recording"))
+                {
+                    StopRecording(video_recorder);
+                    video_recorder = NULL;
+                    UI.is_recording = false;
+                }
+            }
+
+            ImGui::End();
+        }
 
         RenderCube((V3){ 0, 0, 0 }, (V3){ 1, 1, 1 });
 
@@ -263,10 +334,15 @@ namespace viewer
         Color *colors = MagicMotion_GetColors();
         unsigned int point_cloud_size = MagicMotion_GetCloudSize();
 
-        V3 fcolors[point_cloud_size];
+        V3 fcolors[point_cloud_size]; // NOTE(istarnion): Allocating this on the stack is risky!
         for(size_t i=0; i<point_cloud_size; ++i)
         {
             fcolors[i] = (V3){ colors[i].r / 255.0f, colors[i].g / 255.0f, colors[i].b / 255.0f };
+        }
+
+        if(UI.is_recording)
+        {
+            WriteVideoFrame(video_recorder, point_cloud_size, positions, colors);
         }
 
         RenderPointCloud(positions, fcolors, point_cloud_size, (V3){ 0, 0, 0 }, (V3){ 0, 0, 0 });

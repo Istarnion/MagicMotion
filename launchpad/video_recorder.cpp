@@ -1,7 +1,6 @@
 #include "magic_motion.h" // Color
 #include <stdio.h>
 
-
 #define MINIZ_NO_STDIO
 #define MINIZ_NO_TIME
 #define MINIZ_NO_ARCHIVE_APIS
@@ -52,7 +51,9 @@ StartVideoRecording(const char *file)
 void
 StopRecording(VideoRecorder *recorder)
 {
-    fwrite(&recorder->frame_count, sizeof(size_t), 1);
+    SDL_assert(recorder);
+
+    fwrite(&recorder->frame_count, sizeof(size_t), 1, recorder->file);
     fclose(recorder->file);
     recorder->file = NULL;
     recorder->frame_count = 0;
@@ -63,8 +64,8 @@ CompressAndWriteData(FILE *f, void *data, size_t size)
 {
     size_t compressed_size;
     void *compressed_data = tdefl_compress_mem_to_heap(data, size, &compressed_size, 0);
-    fwrite(&compressed_size, sizeof(size_t), 1);
-    fwrite(compressed_data, 1, compressed_size);
+    fwrite(&compressed_size, sizeof(size_t), 1, f);
+    fwrite(compressed_data, 1, compressed_size, f);
 }
 
 void
@@ -75,7 +76,7 @@ WriteVideoFrame(VideoRecorder *recorder, size_t n_points, V3 *xyz, Color *rgb)
     CompressAndWriteData(recorder->file, rgb, n_points*sizeof(Color));
 }
 
-#ifdef __cplusplus__
+#ifdef __cplusplus
 } // extern "C"
 #endif
 

@@ -305,7 +305,8 @@ namespace viewer
         if(UI.render_voxels)
         {
             Voxel *voxels = MagicMotion_GetVoxels();
-            V3 voxel_centers[512];
+            V3 voxel_centers[256];
+            V3 voxel_colors[256];
             int voxel_index = 0;
             for(int z=0; z<NUM_VOXELS_Z; ++z)
             {
@@ -313,17 +314,25 @@ namespace viewer
                 {
                     for(int x=0; x<NUM_VOXELS_X; ++x)
                     {
-                        if(voxels[x+y*NUM_VOXELS_X+z*NUM_VOXELS_X*NUM_VOXELS_Y].point_count > 8)
+                        const int i = x+y*NUM_VOXELS_X+z*NUM_VOXELS_X*NUM_VOXELS_Y;
+                        if(voxels[i].point_count > 8)
                         {
+                            Color c = voxels[i].color;
+                            voxel_colors[voxel_index] = (V3){
+                                c.r / 255.0f,
+                                c.g / 255.0f,
+                                c.b / 255.0f
+                            };
+
                             voxel_centers[voxel_index++] = (V3){
                                 (x - NUM_VOXELS_X/2) * VOXEL_SIZE,
                                 (y - NUM_VOXELS_Y/2) * VOXEL_SIZE,
                                 (z - NUM_VOXELS_Z/2) * VOXEL_SIZE
                             };
 
-                            if(voxel_index >= 512)
+                            if(voxel_index >= 256)
                             {
-                                RenderCubes(voxel_centers, 512, (V3){ 1, 1, 1 });
+                                RenderCubes(voxel_centers, voxel_colors, 256);
                                 voxel_index = 0;
                             }
                         }
@@ -333,7 +342,7 @@ namespace viewer
 
             if(voxel_index > 0)
             {
-                RenderCubes(voxel_centers, voxel_index, (V3){ 1, 1, 1 });
+                RenderCubes(voxel_centers, voxel_colors, voxel_index);
             }
         }
 

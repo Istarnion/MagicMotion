@@ -21,7 +21,7 @@ typedef struct
     GLuint shader;
     GLint mvp_loc;
     GLint positions_loc;
-    GLint color_loc;
+    GLint colors_loc;
 } RenderInstancedData;
 
 static SDL_Window *window;
@@ -177,7 +177,7 @@ RendererInit(const char *title, int width, int height)
         cube_instanced_data.shader = _CreateShaderProgram("shaders/instanced_cubes.glsl");
         cube_instanced_data.mvp_loc = glGetUniformLocation(cube_instanced_data.shader, "MVP");
         cube_instanced_data.positions_loc = glGetUniformLocation(cube_instanced_data.shader, "Positions");
-        cube_instanced_data.color_loc = glGetUniformLocation(cube_instanced_data.shader, "Color");
+        cube_instanced_data.colors_loc = glGetUniformLocation(cube_instanced_data.shader, "Colors");
 
         // Then for the wire cube
         static const GLushort wire_indices[] = {
@@ -335,21 +335,23 @@ RenderCube(V3 center, V3 size)
 }
 
 void
-RenderCubes(V3 *centers, size_t num_cubes, V3 color)
+RenderCubes(V3 *centers, V3 *colors, size_t num_cubes)
 {
     glBindVertexArray(cube_data.vertex_array);
     glUseProgram(cube_instanced_data.shader);
 
     glUniformMatrix4fv(cube_instanced_data.mvp_loc, 1, GL_FALSE, (float *)&projection_view_matrix);
-    glUniform3fv(cube_instanced_data.color_loc, 1, (float *)&color);
 
     // Draw in instanced batches of up to 512 cubes at a time
-    for(size_t i=0; i<num_cubes; i+=512)
+    for(size_t i=0; i<num_cubes; i+=256)
     {
-        int num_cubes_to_draw = MIN(512, num_cubes-i);
+        int num_cubes_to_draw = MIN(256, num_cubes-i);
         glUniform3fv(cube_instanced_data.positions_loc, num_cubes_to_draw, (GLfloat *)(centers+i));
+        glUniform3fv(cube_instanced_data.colors_loc, num_cubes_to_draw, (GLfloat *)(colors+i));
         glDrawElementsInstanced(GL_TRIANGLES, 6*6, GL_UNSIGNED_SHORT, NULL, num_cubes_to_draw);
     }
+
+    check_gl_errors();
 }
 
 void

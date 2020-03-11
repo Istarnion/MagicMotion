@@ -208,8 +208,11 @@ MagicMotion_CaptureFrame(void)
                                                voxel_y*NUM_VOXELS_X +
                                                voxel_z*NUM_VOXELS_X*NUM_VOXELS_Z;
 
-                        ++magic_motion.voxels[voxel_index].point_count;
-                        // TODO(istarnion): compute average color
+                        Voxel *v = &magic_motion.voxels[voxel_index];
+                        v->color.r = (uint8_t)((color.r + v->point_count * v->color.r) / (v->point_count+1));
+                        v->color.g = (uint8_t)((color.g + v->point_count * v->color.g) / (v->point_count+1));
+                        v->color.b = (uint8_t)((color.b + v->point_count * v->color.b) / (v->point_count+1));
+                        ++v->point_count;
                     }
                 }
             }

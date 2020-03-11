@@ -14,20 +14,6 @@
 extern "C" {
 #endif
 
-#define MAX_HITBOXES 128
-#define MAX_HITBOX_EVENTS 128
-
-// How many points needs to be inside a hitbox to be considered a hit?
-#define HITBOX_POINT_TRESHOLD 14
-
-typedef struct
-{
-    V3 position;
-    V3 size;
-    int point_count;
-    bool considered_hit;
-} Hitbox;
-
 static struct
 {
     SensorInfo sensors[MAX_SENSORS];
@@ -39,29 +25,7 @@ static struct
     MagicMotionTag *tag_cloud;
     unsigned int cloud_size;
     unsigned int cloud_capacity;
-
-    Hitbox hitboxes[MAX_HITBOXES];
-    unsigned int num_hitboxes;
-
-    // TODO(istarnion): Consider changing this for an octtree or similar
-    V3 boundingbox_min;
-    V3 boundingbox_max;
-
-    MagicMotionHitboxEvent hitbox_events[MAX_HITBOX_EVENTS];
-    unsigned int num_hitbox_events;
 } magic_motion;
-
-static bool
-MagicMotion_BoxVsV3(V3 box_pos, V3 box_size, V3 v)
-{
-    float hw = box_size.x / 2.0f;
-    float hh = box_size.y / 2.0f;
-    float hd = box_size.z / 2.0f;
-
-    return !(v.x < box_pos.x - hw || v.x > box_pos.x + hw ||
-             v.y < box_pos.y - hh || v.y > box_pos.y + hh ||
-             v.z < box_pos.z - hd || v.z > box_pos.z + hd);
-}
 
 void
 MagicMotion_Initialize(void)
@@ -116,8 +80,6 @@ MagicMotion_Initialize(void)
     magic_motion.tag_cloud = (MagicMotionTag *)calloc(magic_motion.cloud_capacity, sizeof(MagicMotionTag));
     magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity, sizeof(Color));
 
-    MagicMotion_ReloadBoxes();
-
     printf("MagicMotion initialized with %u active sensors. Point cloud size: %u\n",
            magic_motion.num_active_sensors, magic_motion.cloud_capacity);
 }
@@ -136,30 +98,6 @@ MagicMotion_Finalize(void)
     }
 
     FinalizeSensorInterface();
-}
-
-void
-MagicMotion_ReloadBoxes(void)
-{
-    FILE *f = fopen("boxes.ser", "r");
-    if(f)
-    {
-        magic_motion.num_hitboxes = 0;
-        int num_boxes = 0;
-        fscanf(f, "%d\n", &num_boxes);
-        if(num_boxes > MAX_HITBOXES) num_boxes = MAX_HITBOXES;
-
-        for(int i=0; i<num_boxes; ++i)
-        {
-            V3 pos;
-            V3 size;
-            fscanf(f, "%f,%f,%f|%f,%f,%f\n",
-                   &pos.x,  &pos.y,  &pos.z,
-                   &size.x, &size.y, &size.z);
-
-            MagicMotion_RegisterHitbox(pos, size);
-        }
-    }
 }
 
 unsigned int
@@ -208,12 +146,6 @@ void
 MagicMotion_CaptureFrame(void)
 {
     magic_motion.cloud_size = 0;
-    magic_motion.num_hitbox_events = 0;
-
-    for(unsigned int i=0; i<magic_motion.num_hitboxes; ++i)
-    {
-        magic_motion.hitboxes[i].point_count = 0;
-    }
 
     for(unsigned int i=0; i<magic_motion.num_active_sensors; ++i)
     {
@@ -245,18 +177,6 @@ MagicMotion_CaptureFrame(void)
                     V3 point = MulMat4Vec3(camera_transform,
                                            (V3){ pos_x / 100.0f, pos_y / 100.0f, depth / 100.0f });
 
-                    if(!(point.x < magic_motion.boundingbox_min.x || point.x > magic_motion.boundingbox_max.x ||
-                         point.y < magic_motion.boundingbox_min.y || point.y > magic_motion.boundingbox_max.y ||
-                         point.z < magic_motion.boundingbox_min.z || point.z > magic_motion.boundingbox_max.z))
-                    {
-                        for(unsigned int j=0; j<magic_motion.num_hitboxes; ++j)
-                        {
-                            magic_motion.hitboxes[j].point_count += (int)MagicMotion_BoxVsV3(magic_motion.hitboxes[j].position,
-                                                                                             magic_motion.hitboxes[j].size,
-                                                                                             point);
-                        }
-                    }
-
                     ColorPixel c = colors[x+y*w];
                     Color color;
                     color.r = c.r;
@@ -270,28 +190,6 @@ MagicMotion_CaptureFrame(void)
                     magic_motion.tag_cloud[index] = tag;
                 }
             }
-        }
-    }
-
-    for(unsigned int i=0; i<magic_motion.num_hitboxes; ++i)
-    {
-        if(magic_motion.hitboxes[i].point_count >= HITBOX_POINT_TRESHOLD &&
-           !magic_motion.hitboxes[i].considered_hit)
-        {
-            magic_motion.hitboxes[i].considered_hit = true;
-            magic_motion.hitbox_events[magic_motion.num_hitbox_events++] = (MagicMotionHitboxEvent){
-                .hitbox = (int)i,
-                .enter = true
-            };
-        }
-        else if(magic_motion.hitboxes[i].point_count == 0 &&
-                magic_motion.hitboxes[i].considered_hit)
-        {
-            magic_motion.hitboxes[i].considered_hit = false;
-            magic_motion.hitbox_events[magic_motion.num_hitbox_events++] = (MagicMotionHitboxEvent){
-                .hitbox = (int)i,
-                .enter = false
-            };
         }
     }
 }
@@ -346,73 +244,6 @@ MagicMotionTag *
 MagicMotion_GetTags(void)
 {
     return magic_motion.tag_cloud;
-}
-
-static void
-_MagicMotion_CalcBoundingBox()
-{
-    magic_motion.boundingbox_min = (V3){ INFINITY, INFINITY, INFINITY };
-    magic_motion.boundingbox_max = (V3){ -INFINITY, -INFINITY, -INFINITY };
-
-    for(int i=0; i<magic_motion.num_hitboxes; ++i)
-    {
-        V3 min = (V3){
-            magic_motion.hitboxes[i].position.x - magic_motion.hitboxes[i].size.x / 2.0f,
-            magic_motion.hitboxes[i].position.y - magic_motion.hitboxes[i].size.y / 2.0f,
-            magic_motion.hitboxes[i].position.z - magic_motion.hitboxes[i].size.z / 2.0f,
-        };
-
-        V3 max = (V3){
-            magic_motion.hitboxes[i].position.x + magic_motion.hitboxes[i].size.x / 2.0f,
-            magic_motion.hitboxes[i].position.y + magic_motion.hitboxes[i].size.y / 2.0f,
-            magic_motion.hitboxes[i].position.z + magic_motion.hitboxes[i].size.z / 2.0f,
-        };
-
-        if(min.x < magic_motion.boundingbox_min.x) magic_motion.boundingbox_min.x = min.x;
-        if(min.y < magic_motion.boundingbox_min.y) magic_motion.boundingbox_min.y = min.y;
-        if(min.z < magic_motion.boundingbox_min.z) magic_motion.boundingbox_min.z = min.z;
-
-        if(max.x > magic_motion.boundingbox_max.x) magic_motion.boundingbox_max.x = max.x;
-        if(max.y > magic_motion.boundingbox_max.y) magic_motion.boundingbox_max.y = max.y;
-        if(max.z > magic_motion.boundingbox_max.z) magic_motion.boundingbox_max.z = max.z;
-    }
-
-    printf("Min: (%f, %f, %f), Max: (%f, %f, %f)\n",
-           magic_motion.boundingbox_min.x, magic_motion.boundingbox_min.y, magic_motion.boundingbox_min.z,
-           magic_motion.boundingbox_max.x, magic_motion.boundingbox_max.y, magic_motion.boundingbox_max.z);
-}
-
-int
-MagicMotion_RegisterHitbox(V3 pos, V3 size)
-{
-    int result = -1;
-
-    if(magic_motion.num_hitboxes < MAX_HITBOXES)
-    {
-        magic_motion.hitboxes[magic_motion.num_hitboxes] = (Hitbox){ pos, size };
-        result = magic_motion.num_hitboxes++;
-
-        _MagicMotion_CalcBoundingBox();
-
-        printf("Registerd hitbox %d at (%f, %f, %f), size: (%f, %f, %f)\n", result, pos.x, pos.y, pos.z, size.x, size.y, size.z);
-    }
-
-    return result;
-}
-
-void
-MagicMotion_UpdateHitbox(int hitbox, V3 pos, V3 size)
-{
-    magic_motion.hitboxes[hitbox].position = pos;
-    magic_motion.hitboxes[hitbox].size = size;
-    _MagicMotion_CalcBoundingBox();
-}
-
-MagicMotionHitboxEvent *
-MagicMotion_QueryHitboxes(int *num_events)
-{
-    *num_events = magic_motion.num_hitbox_events;
-    return magic_motion.hitbox_events;
 }
 
 #ifdef __cplusplus

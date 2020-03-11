@@ -29,16 +29,8 @@ typedef union
     };
 } Color;
 
-typedef struct
-{
-    int hitbox;
-    bool enter;
-} MagicMotionHitboxEvent;
-
 void MagicMotion_Initialize(void);
 void MagicMotion_Finalize(void);
-
-void MagicMotion_ReloadBoxes(void);
 
 unsigned int MagicMotion_GetNumCameras(void);
 const char *MagicMotion_GetCameraName(unsigned int camera_index);
@@ -61,11 +53,8 @@ V3 *MagicMotion_GetPositions(void);
 Color *MagicMotion_GetColors(void);
 MagicMotionTag *MagicMotion_GetTags(void);
 
-int MagicMotion_RegisterHitbox(V3 pos, V3 size);
-void MagicMotion_UpdateHitbox(int hitbox, V3 pos, V3 size);
-MagicMotionHitboxEvent *MagicMotion_QueryHitboxes(int *num_events);
-
 #ifdef __cplusplus
 }
 #endif
 #endif /* end of include guard: MAGIC_MOTION_H_ */
+

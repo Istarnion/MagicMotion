@@ -25,6 +25,8 @@ static struct
     MagicMotionTag *tag_cloud;
     unsigned int cloud_size;
     unsigned int cloud_capacity;
+
+    Voxel *voxels;
 } magic_motion;
 
 void
@@ -80,13 +82,16 @@ MagicMotion_Initialize(void)
     magic_motion.tag_cloud = (MagicMotionTag *)calloc(magic_motion.cloud_capacity, sizeof(MagicMotionTag));
     magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity, sizeof(Color));
 
-    printf("MagicMotion initialized with %u active sensors. Point cloud size: %u\n",
-           magic_motion.num_active_sensors, magic_motion.cloud_capacity);
+    magic_motion.voxels = (Voxel *)calloc(NUM_VOXELS, sizeof(Voxel));
+
+    printf("MagicMotion initialized with %u active sensors. Point cloud size: %u. %u voxels.\n",
+           magic_motion.num_active_sensors, magic_motion.cloud_capacity, NUM_VOXELS);
 }
 
 void
 MagicMotion_Finalize(void)
 {
+    free(magic_motion.voxels);
     free(magic_motion.color_cloud);
     free(magic_motion.tag_cloud);
     free(magic_motion.spatial_cloud);
@@ -146,6 +151,7 @@ void
 MagicMotion_CaptureFrame(void)
 {
     magic_motion.cloud_size = 0;
+    memset(magic_motion.voxels, 0, NUM_VOXELS*sizeof(Voxel));
 
     for(unsigned int i=0; i<magic_motion.num_active_sensors; ++i)
     {
@@ -163,9 +169,9 @@ MagicMotion_CaptureFrame(void)
         const Frustum f = magic_motion.sensor_frustums[i];
         const Mat4 camera_transform = f.transform;
 
-        for(unsigned int y=0; y<h; ++y)
+        for(uint32_t y=0; y<h; ++y)
         {
-            for(unsigned int x=0; x<w; ++x)
+            for(uint32_t x=0; x<w; ++x)
             {
                 float depth = depths[x+y*w];
                 if(depth > 0.0f)
@@ -188,6 +194,23 @@ MagicMotion_CaptureFrame(void)
                     magic_motion.spatial_cloud[index] = point;
                     magic_motion.color_cloud[index] = color;
                     magic_motion.tag_cloud[index] = tag;
+
+                    // Check if the point is within the voxel grid
+                    if(fabs(point.x) < BOUNDING_BOX_X/2.0f &&
+                       fabs(point.y) < BOUNDING_BOX_Y/2.0f &&
+                       fabs(point.z) < BOUNDING_BOX_Z/2.0f)
+                    {
+                        uint32_t voxel_x = (uint32_t)(point.x / VOXEL_SIZE) + NUM_VOXELS_X/2;
+                        uint32_t voxel_y = (uint32_t)(point.y / VOXEL_SIZE) + NUM_VOXELS_Y/2;
+                        uint32_t voxel_z = (uint32_t)(point.z / VOXEL_SIZE) + NUM_VOXELS_Z/2;
+
+                        uint32_t voxel_index = voxel_x +
+                                               voxel_y*NUM_VOXELS_X +
+                                               voxel_z*NUM_VOXELS_X*NUM_VOXELS_Z;
+
+                        ++magic_motion.voxels[voxel_index].point_count;
+                        // TODO(istarnion): compute average color
+                    }
                 }
             }
         }
@@ -244,6 +267,12 @@ MagicMotionTag *
 MagicMotion_GetTags(void)
 {
     return magic_motion.tag_cloud;
+}
+
+Voxel *
+MagicMotion_GetVoxels(void)
+{
+    return magic_motion.voxels;
 }
 
 #ifdef __cplusplus

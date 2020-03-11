@@ -1,3 +1,4 @@
+SHELL:=/bin/bash
 CC=clang
 
 ifeq ($(shell uname),Darwin)
@@ -29,7 +30,8 @@ ${EXE}: ${SRC} ${HEADERS} ${MAGICMOTION}
 	cp ${OPENNI2_REDIST}/libOpenNI2.* ./
 	${CC} ${CFLAGS} launchpad/main.cpp -o $@ ${LIBS}
 
-${MAGICMOTION}: ${MAGICMOTION_PATH}/${MAGICMOTION}
+${MAGICMOTION}: $(shell find src -type f) ${MAGICMOTION_PATH}/${MAGICMOTION}
+	[[ `uname` = Darwin ]] && pushd macOS && xcodebuild || pushd linux && make -B
 	cp ${MAGICMOTION_PATH}/${MAGICMOTION} ./
 
 .PHONY: clean

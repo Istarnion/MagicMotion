@@ -335,14 +335,12 @@ RenderCube(V3 center, V3 size)
 }
 
 void
-RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation, V3 color)
+RenderCubes(V3 *centers, size_t num_cubes, V3 color)
 {
     glBindVertexArray(cube_data.vertex_array);
     glUseProgram(cube_instanced_data.shader);
 
-    Mat4 model_matrix = TransformMat4(offset, (V3){ 4, 4, 4 }, rotation);
-    Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
-    glUniformMatrix4fv(cube_instanced_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
+    glUniformMatrix4fv(cube_instanced_data.mvp_loc, 1, GL_FALSE, (float *)&projection_view_matrix);
     glUniform3fv(cube_instanced_data.color_loc, 1, (float *)&color);
 
     // Draw in instanced batches of up to 512 cubes at a time
@@ -355,14 +353,12 @@ RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation, V3 color)
 }
 
 void
-RenderPointCloud(V3 *points, V3 *colors, size_t num_points, V3 offset, V3 rotation)
+RenderPointCloud(V3 *points, V3 *colors, size_t num_points)
 {
     glBindVertexArray(point_data.vertex_array);
     glUseProgram(point_data.shader);
 
-    Mat4 model_matrix = TransformMat4(offset, (V3){ 1, 1, 1 }, rotation);
-    Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
-    glUniformMatrix4fv(point_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
+    glUniformMatrix4fv(point_data.mvp_loc, 1, GL_FALSE, (float *)&projection_view_matrix);
 
     glBindBuffer(GL_ARRAY_BUFFER, point_data.vertex_buffer);
     glBufferData(GL_ARRAY_BUFFER, sizeof(V3)*num_points, points, GL_STREAM_DRAW);

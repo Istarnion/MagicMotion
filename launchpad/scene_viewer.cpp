@@ -10,7 +10,6 @@
 
 namespace viewer
 {
-    #define MAX_BOXES 128
     #define MAX_PARTICLES 128
 
     typedef enum
@@ -33,12 +32,6 @@ namespace viewer
     typedef struct
     {
         V3 position;
-        V3 size;
-    } Box;
-
-    typedef struct
-    {
-        V3 position;
         V3 velocity;
         float time_to_live;
     } Particle;
@@ -51,10 +44,7 @@ namespace viewer
 
     static int num_active_sensors;
     static SensorRenderData active_sensors[MAX_SENSORS];
-    static int selected_box;
     static int selected_sensor;
-    static Box boxes[MAX_BOXES];
-    static int num_boxes;
     static ImGuizmo::MODE gizmo_mode;
 
     static Particle particles[MAX_PARTICLES];
@@ -65,8 +55,7 @@ namespace viewer
 
     enum UIMode
     {
-        UI_CAMERA,
-        UI_BOXES
+        UI_CAMERA
     };
 
     static struct
@@ -75,6 +64,10 @@ namespace viewer
         bool video_window_open;
         char recording_filename[128];
         bool is_recording;
+
+        bool render_point_cloud;
+        bool render_voxels;
+        bool render_voxel_bounds;
     } UI;
 
     void
@@ -120,17 +113,12 @@ namespace viewer
             active_sensors[i].frustum = frustums[i];
             const char *serial = MagicMotion_GetCameraSerialNumber(i);
             const char *nick;
+
+            // EXAMPLE
+            /*
             if(strcmp(serial, "18110830920") == 0)
             {
                 nick = "Fremst";
-            }
-            else if(strcmp(serial, "17122730203") == 0)
-            {
-                nick = "Midt";
-            }
-            else if(strcmp(serial, "17122730029") == 0)
-            {
-                nick = "Innerst";
             }
             else
             {
@@ -139,26 +127,15 @@ namespace viewer
 
             snprintf(active_sensors[i].name, 128, "%s (%s)",
                      nick, serial);
-        }
-
-        FILE *f = fopen(config->box_file, "r");
-        if(f)
-        {
-            fscanf(f, "%d\n", &num_boxes);
-            if(num_boxes > MAX_BOXES) num_boxes = MAX_BOXES;
-
-            for(int i=0; i<num_boxes; ++i)
-            {
-                fscanf(f, "%f,%f,%f|%f,%f,%f\n",
-                       &boxes[i].position.x, &boxes[i].position.y, &boxes[i].position.z,
-                       &boxes[i].size.x, &boxes[i].size.y, &boxes[i].size.z);
-            }
+            */
         }
 
         selected_sensor = 0;
         gizmo_mode = ImGuizmo::LOCAL;
 
         strcpy(UI.recording_filename, "recording.vid");
+        UI.render_voxels = true;
+        UI.render_voxel_bounds = true;
 
         return true;
     }
@@ -173,16 +150,20 @@ namespace viewer
         RendererSetViewMatrix(CameraGetViewMatrix(&cam));
 
         ImGui::BeginMainMenuBar();
+        if(ImGui::BeginMenu("View"))
+        {
+            ImGui::MenuItem("Point Cloud", NULL, &UI.render_point_cloud);
+            ImGui::MenuItem("Voxels", NULL, &UI.render_voxels);
+            ImGui::MenuItem("Voxel Bounds", NULL, &UI.render_voxel_bounds);
+
+            ImGui::EndMenu();
+        }
+
         if(ImGui::BeginMenu("Tools"))
         {
             if(ImGui::MenuItem("Camera Mode", NULL, UI.mode == UI_CAMERA))
             {
                 UI.mode = UI_CAMERA;
-            }
-
-            if(ImGui::MenuItem("Box Mode", NULL, UI.mode == UI_BOXES))
-            {
-                UI.mode = UI_BOXES;
             }
 
             ImGui::MenuItem("Video Recording", NULL, &UI.video_window_open);
@@ -266,40 +247,6 @@ namespace viewer
 
             ImGui::End();
         }
-        else if(UI.mode == UI_BOXES)
-        {
-            // Boxes!
-            if(ImGui::Begin("Scene"))
-            {
-                for(int i=0; i<num_boxes; ++i)
-                {
-                    ImGui::PushID(i);
-                    ImGui::RadioButton("Box", &selected_box, i);
-                    ImGui::PopID();
-                }
-            }
-
-            ImGui::End();
-
-            if(ImGui::Begin("Inspector"))
-            {
-                Box *box = &boxes[selected_box];
-
-                ImGui::InputFloat3("Position", (float *)&box->position);
-                ImGui::InputFloat3("Size", (float *)&box->size);
-
-                Mat4 transform = TranslationMat4(box->position);
-
-                ImGuizmo::Manipulate(view->v, proj->v,
-                        ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
-                        transform.v);
-
-                DecomposeMat4(transform, &box->position, NULL, NULL);
-                MagicMotion_UpdateHitbox(selected_box, box->position, box->size);
-            }
-
-            ImGui::End();
-        }
 
         if(UI.video_window_open)
         {
@@ -334,10 +281,19 @@ namespace viewer
         Color *colors = MagicMotion_GetColors();
         unsigned int point_cloud_size = MagicMotion_GetCloudSize();
 
-        V3 fcolors[point_cloud_size]; // NOTE(istarnion): Allocating this on the stack is risky!
-        for(size_t i=0; i<point_cloud_size; ++i)
+        if(UI.render_point_cloud)
         {
-            fcolors[i] = (V3){ colors[i].r / 255.0f, colors[i].g / 255.0f, colors[i].b / 255.0f };
+            V3 fcolors[point_cloud_size]; // NOTE(istarnion): Allocating this on the stack is risky!
+            for(size_t i=0; i<point_cloud_size; ++i)
+            {
+                fcolors[i] = (V3){
+                    colors[i].r / 255.0f,
+                    colors[i].g / 255.0f,
+                    colors[i].b / 255.0f
+                };
+            }
+
+            RenderPointCloud(positions, fcolors, point_cloud_size);
         }
 
         if(UI.is_recording)
@@ -345,29 +301,53 @@ namespace viewer
             WriteVideoFrame(video_recorder, point_cloud_size, positions, colors);
         }
 
-        RenderPointCloud(positions, fcolors, point_cloud_size, (V3){ 0, 0, 0 }, (V3){ 0, 0, 0 });
+
+        if(UI.render_voxels)
+        {
+            Voxel *voxels = MagicMotion_GetVoxels();
+            V3 voxel_centers[512];
+            int voxel_index = 0;
+            for(int z=0; z<NUM_VOXELS_Z; ++z)
+            {
+                for(int y=0; y<NUM_VOXELS_Y; ++y)
+                {
+                    for(int x=0; x<NUM_VOXELS_X; ++x)
+                    {
+                        if(voxels[x+y*NUM_VOXELS_X+z*NUM_VOXELS_X*NUM_VOXELS_Y].point_count > 8)
+                        {
+                            voxel_centers[voxel_index++] = (V3){
+                                (x - NUM_VOXELS_X/2) * VOXEL_SIZE,
+                                (y - NUM_VOXELS_Y/2) * VOXEL_SIZE,
+                                (z - NUM_VOXELS_Z/2) * VOXEL_SIZE
+                            };
+
+                            if(voxel_index >= 512)
+                            {
+                                RenderCubes(voxel_centers, 512, (V3){ 1, 1, 1 });
+                                voxel_index = 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if(voxel_index > 0)
+            {
+                RenderCubes(voxel_centers, voxel_index, (V3){ 1, 1, 1 });
+            }
+        }
+
+        if(UI.render_voxel_bounds)
+        {
+            RenderWireCube((V3){ 0, 0, 0 },
+                           (V3){ BOUNDING_BOX_X, BOUNDING_BOX_Y, BOUNDING_BOX_Z });
+        }
 
         for(int i=0; i<num_active_sensors; ++i)
         {
             if(active_sensors[i].show_frustum)
             {
                 RenderFrustum(&active_sensors[i].frustum);
-            }
-        }
-
-        for(int i=0; i<num_boxes; ++i)
-        {
-            RenderWireCube(boxes[i].position, boxes[i].size);
-        }
-
-        int num_hitbox_events = 0;
-        MagicMotionHitboxEvent *events = MagicMotion_QueryHitboxes(&num_hitbox_events);
-        for(int i=0; i<num_hitbox_events; ++i)
-        {
-            printf("Collision %s on hitbox %d\n", (events[i].enter?"enter":"exit"), events[i].hitbox);
-            if(events[i].enter)
-            {
-                ParticleBurst(boxes[events[i].hitbox].position);
             }
         }
 
@@ -386,18 +366,6 @@ namespace viewer
     void
     SceneEnd(void)
     {
-        FILE *f = fopen("boxes.ser", "w");
-        if(f)
-        {
-            fprintf(f, "%d\n", num_boxes);
-
-            for(int i=0; i<num_boxes; ++i)
-            {
-                fprintf(f, "%f,%f,%f|%f,%f,%f\n",
-                        boxes[i].position.x, boxes[i].position.y, boxes[i].position.z,
-                        boxes[i].size.x,     boxes[i].size.y,     boxes[i].size.z);
-            }
-        }
     }
 }
 

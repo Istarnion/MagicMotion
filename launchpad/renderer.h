@@ -16,8 +16,8 @@ Mat4 *RendererGetProjectionMatrix(void);
 
 void RenderWireCube(V3 center, V3 size);
 void RenderCube(V3 center, V3 size);
-void RenderCubes(V3 *centers, size_t num_cubes, V3 offset, V3 rotation);
-void RenderPointCloud(V3 *points, V3 *colors, size_t num_points, V3 offset, V3 rotation);
+void RenderCubes(V3 *centers, size_t num_cubes, V3 color);
+void RenderPointCloud(V3 *points, V3 *colors, size_t num_points);
 void RenderFrustum(const Frustum *frustum);
 void RenderFullscreenQuad(void);
 

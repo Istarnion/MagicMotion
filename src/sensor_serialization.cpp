@@ -10,7 +10,7 @@ typedef enum
     PERSIST_FIELD_END,
     PERSIST_FIELD_SERIAL,
     PERSIST_FIELD_FRUSTUM_TRANS,
-    PERSIST_FIELD_FOV,
+    PERSIST_FIELD_FOV_ASPECT,
     PERSIST_FIELD_FRUSTUM_PLANES
 } PersistFieldHeader;
 
@@ -43,7 +43,7 @@ SaveSensor(const char *serial, Frustum *frustum)
                       "%u %u %u %u "
                       "%u %u %u %u "
                       "%u %u %u %u\n"
-                   "%d %.3f\n"
+                   "%d %.3f %.3f\n"
                    "%d %.3f %.3f\n"
                    "%d\n",
                 PERSIST_FIELD_SERIAL, serial,
@@ -51,7 +51,7 @@ SaveSensor(const char *serial, Frustum *frustum)
                                              t[4],   t[5],  t[6],  t[7],
                                              t[8],   t[9], t[10], t[11],
                                              t[12], t[13], t[14], t[15],
-                PERSIST_FIELD_FOV, frustum->fov,
+                PERSIST_FIELD_FOV_ASPECT, frustum->fov, frustum->aspect,
                 PERSIST_FIELD_FRUSTUM_PLANES, frustum->near_plane, frustum->far_plane,
                 PERSIST_FIELD_END);
 
@@ -120,10 +120,10 @@ LoadSensors(SerializedSensor *sensors, int max_sensors)
                             puts("Read frustum transform");
                             break;
                         }
-                        case PERSIST_FIELD_FOV:
+                        case PERSIST_FIELD_FOV_ASPECT:
                         {
-                            fscanf(f, " %f\n",
-                                   &sensor->frustum.fov);
+                            fscanf(f, " %f %f\n",
+                                   &sensor->frustum.fov, &sensor->frustum.aspect);
                             break;
                         }
                         case PERSIST_FIELD_FRUSTUM_PLANES:

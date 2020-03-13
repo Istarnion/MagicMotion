@@ -32,6 +32,9 @@ extern "C" {
 
 #define NUM_VOXELS (NUM_VOXELS_X*NUM_VOXELS_Y*NUM_VOXELS_Z)
 
+#define VOXEL_INDEX(x, y, z) ((x) + (y)*NUM_VOXELS_X + (z)*NUM_VOXELS_X*NUM_VOXELS_Y)
+#define VOXEL_POSITION(index) (V3){ (index)%NUM_VOXELS_X, (index)/NUM_VOXELS_X%NUM_VOXELS_Y, (index)/(NUM_VOXELS_X*NUM_VOXELS_Y) }
+
 typedef enum
 {
     TAG_CAMERA_0,

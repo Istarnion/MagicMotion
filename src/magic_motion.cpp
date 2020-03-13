@@ -27,7 +27,57 @@ static struct
     unsigned int cloud_capacity;
 
     Voxel *voxels;
+     // A model of the background. For each voxel, this array contains the probability that voxel is part of the background
+     // This will be updated from a CNN in a background thread
+    float *background;
 } magic_motion;
+
+typedef struct
+{
+    int indices[8];
+} Neighbours;
+
+// Get the indices of the 8 nearest neighbours of point
+static Neighbours
+_GetNeighbours(V3 point)
+{
+    int x0 = (int)floor(point.x / VOXEL_SIZE - 0.5f);
+    int y0 = (int)floor(point.x / VOXEL_SIZE - 0.5f);
+    int z0 = (int)floor(point.x / VOXEL_SIZE - 0.5f);
+
+    return (Neighbours){{
+        VOXEL_INDEX(x0,   y0,   z0),
+        VOXEL_INDEX(x0,   y0,   z0+1),
+        VOXEL_INDEX(x0,   y0+1, z0),
+        VOXEL_INDEX(x0,   y0+1, z0+1),
+        VOXEL_INDEX(x0+1, y0,   z0),
+        VOXEL_INDEX(x0+1, y0,   z0+1),
+        VOXEL_INDEX(x0+1, y0+1, z0),
+        VOXEL_INDEX(x0+1, y0+1, z0+1)
+    }};
+}
+
+// Get the probability of point being part of the background by interpolating
+// the probabilities of the 8 nearest neighbours
+float
+_TrilinearlyInterpolate(V3 point, float *background)
+{
+    float probability = 0;
+    Neighbours n = _GetNeighbours(point);
+
+    for(int i=0; i<8; ++i)
+    {
+        const int index = n.indices[i];
+        V3 voxel = VOXEL_POSITION(index);
+        weight = (1.0f - fabs(point.x - voxel.x) / VOXEL_SIZE) *
+                 (1.0f - fabs(point.y - voxel.y) / VOXEL_SIZE) *
+                 (1.0f - fabs(point.z - voxel.z) / VOXEL_SIZE);
+
+        probability += weight * background[index];
+    }
+
+    return probability;
+}
 
 void
 MagicMotion_Initialize(void)
@@ -83,6 +133,7 @@ MagicMotion_Initialize(void)
     magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity, sizeof(Color));
 
     magic_motion.voxels = (Voxel *)calloc(NUM_VOXELS, sizeof(Voxel));
+    magic_motion.background = (float *)calloc(NUM_VOXELS, sizeof(float));
 
     printf("MagicMotion initialized with %u active sensors. Point cloud size: %u. %u voxels.\n",
            magic_motion.num_active_sensors, magic_motion.cloud_capacity, NUM_VOXELS);
@@ -91,6 +142,7 @@ MagicMotion_Initialize(void)
 void
 MagicMotion_Finalize(void)
 {
+    free(magic_motion.background);
     free(magic_motion.voxels);
     free(magic_motion.color_cloud);
     free(magic_motion.tag_cloud);

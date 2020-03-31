@@ -9,7 +9,7 @@ ifndef OPENNI2_INCLUDE
 endif
 
 CFLAGS=-shared -fPIC -g -I ../src -I ${OPENNI2_INCLUDE}
-LIBS=-L$(OPENNI2_REDIST) -lOpenNI2
+LIBS=-L$(OPENNI2_REDIST) -lOpenNI2 -pthreads
 
 SRC=$(shell find launchpad -name '*.cpp')
 HEADERS=$(shell find launchpad -name '*.h')

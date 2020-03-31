@@ -10,6 +10,8 @@ extern "C" {
 #endif
 
 // NOTE(istarnion): We use decimeters (dm) as the base unit in this system.
+// The choice is kinda arbitrary, and may be changed, but at the sizes
+// we work with, it gives quite good use of the presicion of floats
 // 1 unit = 1 dm
 // 1 m    = 10 dm
 // 1 inch = 0.254 dm
@@ -32,15 +34,26 @@ extern "C" {
 
 #define NUM_VOXELS (NUM_VOXELS_X*NUM_VOXELS_Y*NUM_VOXELS_Z)
 
+// Map voxel grid coords (not world space coords!) to voxel array index
 #define VOXEL_INDEX(x, y, z) ((x) + (y)*NUM_VOXELS_X + (z)*NUM_VOXELS_X*NUM_VOXELS_Y)
-#define VOXEL_POSITION(index) (V3){ (index)%NUM_VOXELS_X, (index)/NUM_VOXELS_X%NUM_VOXELS_Y, (index)/(NUM_VOXELS_X*NUM_VOXELS_Y) }
+
+#define WORLD_TO_VOXEL(v) VOXEL_INDEX((int)(((v).x - (BOUNDING_BOX_X/-2.0f))/VOXEL_SIZE),\
+                                      (int)(((v).y - (BOUNDING_BOX_Y/-2.0f))/VOXEL_SIZE),\
+                                      (int)(((v).z - (BOUNDING_BOX_Z/-2.0f))/VOXEL_SIZE))
+#define VOXEL_TO_WORLD(index) (V3){ (float)((BOUNDING_BOX_X/-2.0f) + VOXEL_SIZE*((index)%NUM_VOXELS_X) + VOXEL_SIZE/2.0),\
+                                    (float)((BOUNDING_BOX_Y/-2.0f) + VOXEL_SIZE*(((index)/NUM_VOXELS_X)%NUM_VOXELS_Y) + VOXEL_SIZE/2.0),\
+                                    (float)((BOUNDING_BOX_Z/-2.0f) + VOXEL_SIZE*((index)/(NUM_VOXELS_X*NUM_VOXELS_Y)) + VOXEL_SIZE/2.0)\
+                                  }
 
 typedef enum
 {
-    TAG_CAMERA_0,
-    TAG_CAMERA_1,
-    TAG_CAMERA_2,
-    TAG_CAMERA_3
+    TAG_CAMERA_0 = 1,
+    TAG_CAMERA_1 = 2,
+    TAG_CAMERA_2 = 4,
+    TAG_CAMERA_3 = 8,
+
+    TAG_FOREGROUND = 16,
+    TAG_BACKGROUND = 32
 } MagicMotionTag;
 
 typedef union

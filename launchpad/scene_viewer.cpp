@@ -68,6 +68,7 @@ namespace viewer
         bool render_point_cloud;
         bool render_voxels;
         bool render_voxel_bounds;
+        bool visualize_bgsub;
     } UI;
 
     void
@@ -134,7 +135,9 @@ namespace viewer
         gizmo_mode = ImGuizmo::LOCAL;
 
         strcpy(UI.recording_filename, "recording.vid");
-        UI.render_voxels = true;
+        UI.render_voxels = false;
+        UI.render_point_cloud = true;
+        UI.visualize_bgsub = true;
         UI.render_voxel_bounds = true;
 
         return true;
@@ -155,6 +158,7 @@ namespace viewer
             ImGui::MenuItem("Point Cloud", NULL, &UI.render_point_cloud);
             ImGui::MenuItem("Voxels", NULL, &UI.render_voxels);
             ImGui::MenuItem("Voxel Bounds", NULL, &UI.render_voxel_bounds);
+            ImGui::MenuItem("Visualize BG sub", NULL, &UI.visualize_bgsub);
 
             ImGui::EndMenu();
         }
@@ -279,18 +283,50 @@ namespace viewer
 
         V3 *positions = MagicMotion_GetPositions();
         Color *colors = MagicMotion_GetColors();
+        MagicMotionTag *tags = MagicMotion_GetTags();
         unsigned int point_cloud_size = MagicMotion_GetCloudSize();
 
         if(UI.render_point_cloud)
         {
             V3 fcolors[point_cloud_size]; // NOTE(istarnion): Allocating this on the stack is risky!
-            for(size_t i=0; i<point_cloud_size; ++i)
+            if(UI.visualize_bgsub)
             {
-                fcolors[i] = (V3){
-                    colors[i].r / 255.0f,
-                    colors[i].g / 255.0f,
-                    colors[i].b / 255.0f
-                };
+                for(size_t i=0; i<point_cloud_size; ++i)
+                {
+                    float r = 1.0f,
+                          g = 1.0f,
+                          b = 1.0f;
+
+                    if(tags[i] & TAG_FOREGROUND)
+                    {
+                        r = 0.5f;
+                        g = 2.0f;
+                        b = 0.5f;
+                    }
+                    else if(tags[i] & TAG_BACKGROUND)
+                    {
+                        r = 2.0f;
+                        g = 0.5f;
+                        b = 0.5f;
+                    }
+
+                    fcolors[i] = (V3){
+                        (colors[i].r / 255.0f) * r,
+                        (colors[i].g / 255.0f) * g,
+                        (colors[i].b / 255.0f) * b
+                    };
+                }
+            }
+            else
+            {
+                for(size_t i=0; i<point_cloud_size; ++i)
+                {
+                    fcolors[i] = (V3){
+                        colors[i].r / 255.0f,
+                        colors[i].g / 255.0f,
+                        colors[i].b / 255.0f
+                    };
+                }
             }
 
             RenderPointCloud(positions, fcolors, point_cloud_size);
@@ -314,7 +350,7 @@ namespace viewer
                 {
                     for(int x=0; x<NUM_VOXELS_X; ++x)
                     {
-                        const int i = x+y*NUM_VOXELS_X+z*NUM_VOXELS_X*NUM_VOXELS_Y;
+                        const int i = VOXEL_INDEX(x, y, z);
                         if(voxels[i].point_count > 8)
                         {
                             Color c = voxels[i].color;
@@ -324,11 +360,7 @@ namespace viewer
                                 c.b / 255.0f
                             };
 
-                            voxel_centers[voxel_index++] = (V3){
-                                (x - NUM_VOXELS_X/2) * VOXEL_SIZE,
-                                (y - NUM_VOXELS_Y/2) * VOXEL_SIZE,
-                                (z - NUM_VOXELS_Z/2) * VOXEL_SIZE
-                            };
+                            voxel_centers[voxel_index++] = VOXEL_TO_WORLD(i);
 
                             if(voxel_index >= 256)
                             {
@@ -344,6 +376,10 @@ namespace viewer
             {
                 RenderCubes(voxel_centers, voxel_colors, voxel_index);
             }
+        }
+
+        {
+
         }
 
         if(UI.render_voxel_bounds)

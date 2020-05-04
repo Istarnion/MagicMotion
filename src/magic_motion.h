@@ -40,9 +40,9 @@ extern "C" {
 #define WORLD_TO_VOXEL(v) VOXEL_INDEX((int)(((v).x - (BOUNDING_BOX_X/-2.0f))/VOXEL_SIZE),\
                                       (int)(((v).y - (BOUNDING_BOX_Y/-2.0f))/VOXEL_SIZE),\
                                       (int)(((v).z - (BOUNDING_BOX_Z/-2.0f))/VOXEL_SIZE))
-#define VOXEL_TO_WORLD(index) (V3){ (float)((BOUNDING_BOX_X/-2.0f) + VOXEL_SIZE*((index)%NUM_VOXELS_X) + VOXEL_SIZE/2.0),\
+#define VOXEL_TO_WORLD(index) (V3){ (float)((BOUNDING_BOX_X/-2.0f) + VOXEL_SIZE*((index)%NUM_VOXELS_X)                + VOXEL_SIZE/2.0),\
                                     (float)((BOUNDING_BOX_Y/-2.0f) + VOXEL_SIZE*(((index)/NUM_VOXELS_X)%NUM_VOXELS_Y) + VOXEL_SIZE/2.0),\
-                                    (float)((BOUNDING_BOX_Z/-2.0f) + VOXEL_SIZE*((index)/(NUM_VOXELS_X*NUM_VOXELS_Y)) + VOXEL_SIZE/2.0)\
+                                    (float)((BOUNDING_BOX_Z/-2.0f) + VOXEL_SIZE*((index)/(NUM_VOXELS_X*NUM_VOXELS_Y)) + VOXEL_SIZE/2.0) \
                                   }
 
 typedef enum
@@ -96,6 +96,10 @@ Color *MagicMotion_GetColors(void);
 MagicMotionTag *MagicMotion_GetTags(void);
 
 Voxel *MagicMotion_GetVoxels(void); // Return the full voxel grid as an array of length NUM_VOXELS
+
+void MagicMotion_StartCalibration(void); // If using the calibration classifier, start calibrating. While calibrating, the the sensors should see only background.
+void MagicMotion_EndCalibration(void);
+bool MagicMotion_IsCalibrating(void);
 
 #ifdef __cplusplus
 }

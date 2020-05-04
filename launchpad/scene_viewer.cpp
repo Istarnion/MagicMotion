@@ -69,6 +69,7 @@ namespace viewer
         bool render_voxels;
         bool render_voxel_bounds;
         bool visualize_bgsub;
+        bool remove_bg;
     } UI;
 
     void
@@ -159,6 +160,7 @@ namespace viewer
             ImGui::MenuItem("Voxels", NULL, &UI.render_voxels);
             ImGui::MenuItem("Voxel Bounds", NULL, &UI.render_voxel_bounds);
             ImGui::MenuItem("Visualize BG sub", NULL, &UI.visualize_bgsub);
+            ImGui::MenuItem("Subtract BG", NULL, &UI.remove_bg);
 
             ImGui::EndMenu();
         }
@@ -173,6 +175,24 @@ namespace viewer
             ImGui::MenuItem("Video Recording", NULL, &UI.video_window_open);
 
             ImGui::EndMenu();
+        }
+
+        if(MagicMotion_IsCalibrating())
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, 0xFF0000);
+            if(ImGui::Button("Stop"))
+            {
+                MagicMotion_EndCalibration();
+            }
+
+            ImGui::PopStyleColor();
+        }
+        else
+        {
+            if(ImGui::Button("Calibrate"))
+            {
+                MagicMotion_StartCalibration();
+            }
         }
 
         ImGui::EndMainMenuBar();
@@ -288,48 +308,68 @@ namespace viewer
 
         if(UI.render_point_cloud)
         {
-            V3 fcolors[point_cloud_size]; // NOTE(istarnion): Allocating this on the stack is risky!
-            if(UI.visualize_bgsub)
+            // Stack allocating these is risky!
+            V3 fcolors[point_cloud_size];
+            V3 points[point_cloud_size];
+
+
+            size_t actual_cloud_size = 0;
+            for(size_t i=0; i<point_cloud_size; ++i)
             {
-                for(size_t i=0; i<point_cloud_size; ++i)
+                /*
+                remove bg | is foreground | should render (result)
+                y           y               y
+                n           y               y
+                y           n               n
+                n           n               y
+
+                This shows that the only case we should _not_ render a point
+                is when remove bg is true and the point does not have the
+                foreground tag
+                */
+                if(!(UI.remove_bg && (tags[i] & TAG_FOREGROUND) == 0))
                 {
-                    float r = 1.0f,
-                          g = 1.0f,
-                          b = 1.0f;
+                    points[actual_cloud_size] = positions[i];
 
-                    if(tags[i] & TAG_FOREGROUND)
+                    if(UI.visualize_bgsub)
                     {
-                        r = 0.5f;
-                        g = 2.0f;
-                        b = 0.5f;
+                        float r = 1.0f,
+                              g = 1.0f,
+                              b = 1.0f;
+
+                        if(tags[i] & TAG_FOREGROUND)
+                        {
+                            r = 0.5f;
+                            g = 2.0f;
+                            b = 0.5f;
+                        }
+                        else if(tags[i] & TAG_BACKGROUND)
+                        {
+                            r = 2.0f;
+                            g = 0.5f;
+                            b = 0.5f;
+                        }
+
+                        fcolors[actual_cloud_size] = (V3){
+                            (colors[i].r / 255.0f) * r,
+                            (colors[i].g / 255.0f) * g,
+                            (colors[i].b / 255.0f) * b
+                        };
                     }
-                    else if(tags[i] & TAG_BACKGROUND)
+                    else
                     {
-                        r = 2.0f;
-                        g = 0.5f;
-                        b = 0.5f;
+                        fcolors[actual_cloud_size] = (V3){
+                            colors[i].r / 255.0f,
+                            colors[i].g / 255.0f,
+                            colors[i].b / 255.0f
+                        };
                     }
 
-                    fcolors[i] = (V3){
-                        (colors[i].r / 255.0f) * r,
-                        (colors[i].g / 255.0f) * g,
-                        (colors[i].b / 255.0f) * b
-                    };
+                    ++actual_cloud_size;
                 }
             }
-            else
-            {
-                for(size_t i=0; i<point_cloud_size; ++i)
-                {
-                    fcolors[i] = (V3){
-                        colors[i].r / 255.0f,
-                        colors[i].g / 255.0f,
-                        colors[i].b / 255.0f
-                    };
-                }
-            }
 
-            RenderPointCloud(positions, fcolors, point_cloud_size);
+            RenderPointCloud(points, fcolors, actual_cloud_size);
         }
 
         if(UI.is_recording)

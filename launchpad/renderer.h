@@ -14,6 +14,9 @@ void RendererSetProjectionMatrix(Mat4 p);
 Mat4 *RendererGetViewMatrix(void);
 Mat4 *RendererGetProjectionMatrix(void);
 
+void *RendererCreateTexture(const void *pixels, int width, int height);
+void RendererDestroyTexture(void *texture);
+
 void RenderWireCube(V3 center, V3 size);
 void RenderCube(V3 center, V3 size);
 void RenderCubes(V3 *centers, V3 *colors, size_t num_cubes);

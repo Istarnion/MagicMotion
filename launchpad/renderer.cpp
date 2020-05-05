@@ -308,6 +308,33 @@ RendererGetProjectionMatrix(void)
     return &projection_matrix;
 }
 
+void *
+RendererCreateTexture(const void *pixels, int width, int height)
+{
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    // Setup filtering parameters for display
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0, GL_RGBA, width, height,
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    return (void *)(intptr_t)texture;
+}
+
+void
+RendererDestroyTexture(void *texture)
+{
+    glBindTexture(GL_TEXTURE_2D, 0);
+    GLuint tex = (GLuint)(intptr_t)texture;
+    glDeleteTextures(1, &tex);
+}
+
 void
 RenderWireCube(V3 center, V3 size)
 {

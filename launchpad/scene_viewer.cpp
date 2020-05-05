@@ -53,6 +53,8 @@ namespace viewer
 
     static VideoRecorder *video_recorder;
 
+    static void *sensor_preview;
+
     enum UIMode
     {
         UI_CAMERA
@@ -64,6 +66,10 @@ namespace viewer
         bool video_window_open;
         char recording_filename[128];
         bool is_recording;
+
+        bool sensor_view_open;
+        int camera_index;
+        int color_feed;
 
         bool render_point_cloud;
         bool render_voxels;
@@ -173,6 +179,7 @@ namespace viewer
             }
 
             ImGui::MenuItem("Video Recording", NULL, &UI.video_window_open);
+            ImGui::MenuItem("Sensor View", NULL, &UI.sensor_view_open);
 
             ImGui::EndMenu();
         }
@@ -295,6 +302,67 @@ namespace viewer
                     UI.is_recording = false;
                 }
             }
+
+            ImGui::End();
+        }
+
+        if(UI.sensor_view_open)
+        {
+            ImGui::Begin("Sensor View", &UI.sensor_view_open);
+
+            if(sensor_preview)
+            {
+                RendererDestroyTexture(sensor_preview);
+            }
+
+            for(int i=0; i<num_active_sensors; ++i)
+            {
+                ImGui::PushID(i);
+                ImGui::RadioButton(active_sensors[i].name, &UI.camera_index, i);
+                ImGui::PopID();
+            }
+
+            ImGui::RadioButton("Color Feed", (int *)&UI.color_feed, 1);
+            ImGui::RadioButton("Depth Feed", (int *)&UI.color_feed, 0);
+
+            int width, height;
+            if(UI.color_feed)
+            {
+                MagicMotion_GetColorImageResolution(UI.camera_index, &width, &height);
+                uint32_t pixels[width * height];
+                const Color *colors = MagicMotion_GetColorImage(UI.camera_index);
+                for(int i=0; i<width*height; ++i)
+                {
+                    Color c = *colors++;
+                    uint32_t p = (c.b << 16) |
+                                 (c.g << 8)  |
+                                 (c.r)       |
+                                 0xFF000000;
+                    pixels[i] = p;
+                }
+
+                sensor_preview = RendererCreateTexture(pixels, width, height);
+            }
+            else
+            {
+                MagicMotion_GetDepthImageResolution(UI.camera_index, &width, &height);
+                uint32_t pixels[width * height];
+                const float *depths = MagicMotion_GetDepthImage(UI.camera_index);
+                for(int i=0; i<width*height; ++i)
+                {
+                    float d = (*depths++) / 5000.0f;
+                    uint8_t v = 255 * d;
+                    uint32_t p = (v << 16) |
+                                 (v << 8)  |
+                                 (v)       |
+                                 0xFF000000;
+                    pixels[i] = p;
+                }
+                sensor_preview = RendererCreateTexture(pixels, width, height);
+            }
+
+            ImGui::Image(sensor_preview, ImVec2(width, height));
+            ImGui::Text("(%d x %d)", width, height);
 
             ImGui::End();
         }

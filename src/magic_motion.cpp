@@ -1,5 +1,6 @@
 #include <string.h>
 #include <pthread.h>
+#include <assert.h>
 
 #ifdef SENSOR_REALSENSE
 #include "sensor_interface_realsense.cpp"
@@ -384,8 +385,18 @@ MagicMotion_CaptureFrame(void)
 
         int tag = (TAG_CAMERA_0 + i);
 
+        // NOTE(istarnion): The color and depth streams does often
+        // NOT have the same resolution, especially with image
+        // registration enabled, but depth resolution is always
+        // smaller than color resolution.
+        assert(sensor->depth_stream_info.width <= sensor->color_stream_info.width);
+        assert(sensor->depth_stream_info.height <= sensor->color_stream_info.height);
+
         const unsigned int w = sensor->depth_stream_info.width;
         const unsigned int h = sensor->depth_stream_info.height;
+        const unsigned int color_w = sensor->color_stream_info.width;
+        const unsigned int color_h = sensor->color_stream_info.height;
+
         const float fov = sensor->depth_stream_info.fov;
         const float aspect = sensor->depth_stream_info.aspect_ratio;
 
@@ -408,7 +419,7 @@ MagicMotion_CaptureFrame(void)
                                                  pos_y / 100.0f,
                                                  depth / 100.0f });
 
-                    Color color = colors[x+y*w];
+                    Color color = colors[(color_w/2-w/2+x)+(color_h/2-h/2+y)*color_w];
 
                     // Check if the point is within the voxel grid
                     if(fabs(point.x) < BOUNDING_BOX_X/2.0f &&

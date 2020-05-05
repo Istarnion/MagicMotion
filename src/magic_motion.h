@@ -87,6 +87,7 @@ void MagicMotion_CaptureFrame(void);
 void MagicMotion_GetColorImageResolution(unsigned int camera_index, int *width, int *height);
 void MagicMotion_GetDepthImageResolution(unsigned int camera_index, int *width, int *height);
 
+// These functions return the frames from the latest call to MagicMotion_CaptureFrame
 const Color *MagicMotion_GetColorImage(unsigned int camera_index);
 const float *MagicMotion_GetDepthImage(unsigned int camera_index);
 

@@ -41,9 +41,16 @@ struct BackgroundData
     pthread_barrier_t barrier;
 };
 
+struct SensorFrame
+{
+    Color *color_frame;
+    float *depth_frame;
+};
+
 static struct
 {
     SensorInfo sensors[MAX_SENSORS];
+    SensorFrame sensor_frames[MAX_SENSORS];
     Frustum sensor_frustums[MAX_SENSORS];
     unsigned int num_active_sensors;
 
@@ -231,6 +238,8 @@ MagicMotion_Initialize(void)
             .far_plane = sensor->depth_stream_info.max_depth / 100.0f
         };
 
+        magic_motion.sensor_frames[i].color_frame = (Color *)calloc(sensor->color_stream_info.width * sensor->color_stream_info.height, sizeof(Color));
+
         size_t point_cloud_size = sensor->depth_stream_info.width * sensor->depth_stream_info.height;
         magic_motion.cloud_capacity += point_cloud_size;
 
@@ -287,6 +296,7 @@ MagicMotion_Finalize(void)
     {
         SaveSensor(magic_motion.sensors[i].serial, &magic_motion.sensor_frustums[i]);
         SensorFinalize(&magic_motion.sensors[i]);
+        free(magic_motion.sensor_frames[i].color_frame);
     }
 
     FinalizeSensorInterface();
@@ -340,15 +350,24 @@ MagicMotion_CaptureFrame(void)
     // The GetSensor*Frame functions will block for a while due to the
     // camera hardware, so we wait until those are done before we take the mutex
 
-    SensorInfo *sensor_infos[magic_motion.num_active_sensors];
-    ColorPixel *sensor_color_pixels[magic_motion.num_active_sensors];
-    DepthPixel *sensor_depth_pixels[magic_motion.num_active_sensors];
     for(unsigned int i=0; i<magic_motion.num_active_sensors; ++i)
     {
         SensorInfo *sensor = &magic_motion.sensors[i];
-        sensor_infos[i] = sensor;
-        sensor_color_pixels[i] = GetSensorColorFrame(sensor);
-        sensor_depth_pixels[i] = GetSensorDepthFrame(sensor);
+        ColorPixel *color_frame = GetSensorColorFrame(sensor);
+        size_t num_color_pixels = sensor->color_stream_info.width *
+                                  sensor->color_stream_info.height;
+
+        for(size_t j=0; j<num_color_pixels; ++j)
+        {
+            Color c = (Color) { .r = color_frame[j].r,
+                                .g = color_frame[j].g,
+                                .b = color_frame[j].g
+                              };
+
+            magic_motion.sensor_frames[i].color_frame[j] = c;
+        }
+
+        magic_motion.sensor_frames[i].depth_frame = GetSensorDepthFrame(sensor);
     }
 
     pthread_mutex_lock(&magic_motion.background_data.mutex_handle);
@@ -359,9 +378,9 @@ MagicMotion_CaptureFrame(void)
 
     for(unsigned int i=0; i<magic_motion.num_active_sensors; ++i)
     {
-        SensorInfo *sensor = sensor_infos[i];
-        ColorPixel *colors = sensor_color_pixels[i];
-        DepthPixel *depths = sensor_depth_pixels[i];
+        SensorInfo *sensor = &magic_motion.sensors[i];
+        Color      *colors = magic_motion.sensor_frames[i].color_frame;
+        DepthPixel *depths = magic_motion.sensor_frames[i].depth_frame;
 
         int tag = (TAG_CAMERA_0 + i);
 
@@ -389,11 +408,7 @@ MagicMotion_CaptureFrame(void)
                                                  pos_y / 100.0f,
                                                  depth / 100.0f });
 
-                    ColorPixel c = colors[x+y*w];
-                    Color color;
-                    color.r = c.r;
-                    color.g = c.g;
-                    color.b = c.b;
+                    Color color = colors[x+y*w];
 
                     // Check if the point is within the voxel grid
                     if(fabs(point.x) < BOUNDING_BOX_X/2.0f &&
@@ -427,6 +442,8 @@ MagicMotion_CaptureFrame(void)
 
                         // Determine if the point is background or foreground
                         float background_probability = _TrilinearlyInterpolate(point, magic_motion.background_data.background);
+                        // Skip trilinear interpolation, and use nearest voxel instead:
+                        // float background_probability = magic_motion.background_data.background[voxel_index];
 
                         if(background_probability < BACKGROUND_PROBABILITY_TRESHOLD)
                         {
@@ -473,13 +490,13 @@ MagicMotion_GetDepthImageResolution(unsigned int camera_index, int *width, int *
 const Color *
 MagicMotion_GetColorImage(unsigned int camera_index)
 {
-    return NULL;
+    return magic_motion.sensor_frames[camera_index].color_frame;
 }
 
 const float *
 MagicMotion_GetDepthImage(unsigned int camera_index)
 {
-    return NULL;
+    return magic_motion.sensor_frames[camera_index].depth_frame;
 }
 
 unsigned int
@@ -563,8 +580,11 @@ _ComputeBackgroundModel(void *userdata)
                     for(uint32_t i=0; i<NUM_VOXELS; ++i)
                     {
                         float point_count = (float)latest_frame[i].point_count;
-                        avg_point_counts[i] = (avg_point_counts[i] * framenum +
-                                               point_count) / (framenum+1);
+                        /* Average: */
+                        // avg_point_counts[i] = (avg_point_counts[i] * framenum +
+                        //                        point_count) / (framenum+1);
+                        /* Max: */
+                        avg_point_counts[i] = MAX(avg_point_counts[i], point_count);
                     }
                 }
                 else

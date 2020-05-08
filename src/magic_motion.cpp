@@ -2,6 +2,10 @@
 #include <pthread.h>
 #include <assert.h>
 
+#include "opencv2/video.hpp"
+#include <opencv2/video/background_segm.hpp>
+#include <opencv2/bgsegm.hpp>
+
 #ifdef SENSOR_REALSENSE
 #include "sensor_interface_realsense.cpp"
 #else
@@ -17,29 +21,44 @@ extern "C" {
 #endif
 
 #define RUN_TESTS 1
-#define BACKGROUND_PROBABILITY_TRESHOLD 0.01
+#define BACKGROUND_PROBABILITY_TRESHOLD 0.001
 
-enum Classifier
+// The 3D classifiers create a voxel grid
+// background model each point in the cloud
+// can get it's background probability from
+// using trilinear interpolation.
+enum Classifier3D
 {
-    CLASSIFIER_CALIBRATION_NAIVE,
-    CLASSIFIER_DL
+    CLASSIFIER_3D_NONE,
+    CLASSIFIER_3D_CALIBRATION_NAIVE,
+    CLASSIFIER_3D_DL // Not implemented yet
 };
 
-Classifier background_classifier = CLASSIFIER_CALIBRATION_NAIVE;
-
-// A model of the background. For each voxel, this array contains the probability that voxel is part of the background
-// This will be updated from a CNN in a background thread
-// For that reason, we need a mutex as well.
-// An instance of this struct is passed as
-// userdata for the the background thread
-struct BackgroundData
+// The 2D classifiers create a mask per sensor
+// containing white pixels for foreground and
+// black pixels for background
+enum Classifier2D
 {
-    float *background;
-    bool running;
+    CLASSIFIER_2D_NONE,
+    CLASSIFIER_2D_OPENCV
+};
+
+static const Classifier3D classifier3D = CLASSIFIER_3D_CALIBRATION_NAIVE;
+static const Classifier2D classifier2D = CLASSIFIER_2D_OPENCV;
+
+struct ClassifierData3D
+{
     bool is_calibrating; // For the calibration classifier
+    bool running;
     pthread_t thread_handle;
     pthread_mutex_t mutex_handle;
-    pthread_barrier_t barrier;
+};
+
+struct ClassifierData2D
+{
+    bool running;
+    pthread_t thread_handle;
+    pthread_mutex_t mutex_handle;
 };
 
 struct SensorFrame
@@ -50,21 +69,27 @@ struct SensorFrame
 
 static struct
 {
-    SensorInfo sensors[MAX_SENSORS];
+    // Per sensor data:
+    SensorInfo  sensors[MAX_SENSORS];
     SensorFrame sensor_frames[MAX_SENSORS];
-    Frustum sensor_frustums[MAX_SENSORS];
+    float      *sensor_masks[MAX_SENSORS];
+    Frustum     sensor_frustums[MAX_SENSORS];
     unsigned int num_active_sensors;
 
-    unsigned int frame_count;
+    float *background_model;     // A per-voxel array of the background model
 
-    V3 *spatial_cloud;
-    Color *color_cloud;
-    MagicMotionTag *tag_cloud;
-    unsigned int cloud_size;
-    unsigned int cloud_capacity;
+    unsigned int frame_count;    // The frame count increments at every call to CaptureFrame
 
-    Voxel *voxels;
-    BackgroundData background_data;
+    V3 *spatial_cloud;           // XYZ components of the point cloud
+    Color *color_cloud;          // RGB components of the point cloud
+    MagicMotionTag *tag_cloud;   // 32 bit tags for each point in the cloud
+    unsigned int cloud_size;     // The number of points currently in the cloud
+    unsigned int cloud_capacity; // The maximum number of points in the cloud
+
+    Voxel voxels[NUM_VOXELS];    // The voxel grid, with the lastest information
+
+    ClassifierData3D classifier_thread_3D;
+    ClassifierData2D classifier_thread_2D;
 } magic_motion;
 
 typedef struct
@@ -136,10 +161,12 @@ _TrilinearlyInterpolate(V3 point, float *background)
     return probability;
 }
 
-// Prototype of the function that will run in a background thread and
+// Prototype of the functions that will run in a background thread and
 // compute the background model.
 // The implementation is at the bottom of this file
-static void *_ComputeBackgroundModel(void *userdata);
+static void *_ComputeBackgroundModelNaiveCalibration(void *userdata);
+static void *_ComputeBackgroundModelDL(void *userdata);
+static void *_ComputeBackgroundModelOpenCV(void *userdata);
 
 void
 MagicMotion_Initialize(void)
@@ -240,6 +267,12 @@ MagicMotion_Initialize(void)
         };
 
         magic_motion.sensor_frames[i].color_frame = (Color *)calloc(sensor->color_stream_info.width * sensor->color_stream_info.height, sizeof(Color));
+        magic_motion.sensor_masks[i] = (float *)malloc(sensor->depth_stream_info.width *
+                                                      sensor->depth_stream_info.height *
+                                                      sizeof(float));
+        std::fill_n(magic_motion.sensor_masks[i],
+                    sensor->depth_stream_info.width*sensor->depth_stream_info.height,
+                    1.0f);
 
         size_t point_cloud_size = sensor->depth_stream_info.width * sensor->depth_stream_info.height;
         magic_motion.cloud_capacity += point_cloud_size;
@@ -255,40 +288,85 @@ MagicMotion_Initialize(void)
             }
             else
             {
-                printf("Failed to load sensor config: %s did not match %s\n", sensor->serial, serialized_sensors[j].serial);
+                printf("Failed to load sensor config: %s did not match %s\n",
+                       sensor->serial, serialized_sensors[j].serial);
             }
         }
     }
 
     magic_motion.spatial_cloud = (V3 *)calloc(magic_motion.cloud_capacity, sizeof(V3));
-    magic_motion.tag_cloud = (MagicMotionTag *)calloc(magic_motion.cloud_capacity, sizeof(MagicMotionTag));
+    magic_motion.tag_cloud = (MagicMotionTag *)calloc(magic_motion.cloud_capacity,
+                                                      sizeof(MagicMotionTag));
     magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity, sizeof(Color));
 
-    magic_motion.voxels = (Voxel *)calloc(NUM_VOXELS, sizeof(Voxel));
-    magic_motion.background_data.background = (float *)calloc(NUM_VOXELS, sizeof(float));
+    magic_motion.background_model = (float *)calloc(NUM_VOXELS,
+                                                    sizeof(float));
 
-    pthread_barrier_init(&magic_motion.background_data.barrier, NULL, 2);
-    magic_motion.background_data.running = true;
     pthread_attr_t thread_attributes;
     pthread_attr_init(&thread_attributes); // Set default attributes
-    pthread_attr_setdetachstate(&thread_attributes, PTHREAD_CREATE_DETACHED);
-    pthread_create(&magic_motion.background_data.thread_handle, &thread_attributes,
-                   &_ComputeBackgroundModel, &magic_motion.background_data);
+    // pthread_attr_setdetachstate(&thread_attributes, PTHREAD_CREATE_DETACHED);
+
+    void *(*thread_3D)(void *);
+    switch(classifier3D)
+    {
+        case CLASSIFIER_3D_CALIBRATION_NAIVE:
+            thread_3D = &_ComputeBackgroundModelNaiveCalibration;
+            break;
+        case CLASSIFIER_3D_DL:
+            thread_3D = &_ComputeBackgroundModelDL;
+            break;
+        default:
+            thread_3D = NULL;
+            break;
+    }
+
+    void *(*thread_2D)(void *);
+    switch(classifier2D)
+    {
+        case CLASSIFIER_2D_OPENCV:
+            thread_2D = &_ComputeBackgroundModelOpenCV;
+            break;
+        default:
+            thread_2D = NULL;
+            break;
+    }
+
+    if(thread_3D)
+    {
+        magic_motion.classifier_thread_3D.running = true;
+        pthread_create(&magic_motion.classifier_thread_3D.thread_handle, &thread_attributes,
+                       thread_3D, &magic_motion.classifier_thread_3D);
+    }
+
+    if(thread_2D)
+    {
+        magic_motion.classifier_thread_2D.running = true;
+        pthread_create(&magic_motion.classifier_thread_2D.thread_handle, &thread_attributes,
+                       thread_2D, &magic_motion.classifier_thread_2D);
+    }
+
     pthread_attr_destroy(&thread_attributes);
 
     printf("MagicMotion initialized with %u active sensors. Point cloud size: %u. %u voxels.\n",
            magic_motion.num_active_sensors, magic_motion.cloud_capacity, NUM_VOXELS);
-
 }
 
 void
 MagicMotion_Finalize(void)
 {
-    magic_motion.background_data.running = false;
-    // pthread_join(magic_motion.background_data.thread_handle, NULL);
+    if(magic_motion.classifier_thread_3D.running)
+    {
+        magic_motion.classifier_thread_3D.running = false;
+        pthread_join(magic_motion.classifier_thread_3D.thread_handle, NULL);
+    }
 
-    free(magic_motion.background_data.background);
-    free(magic_motion.voxels);
+    if(magic_motion.classifier_thread_2D.running)
+    {
+        magic_motion.classifier_thread_2D.running = false;
+        pthread_join(magic_motion.classifier_thread_2D.thread_handle, NULL);
+    }
+
+    free(magic_motion.background_model);
     free(magic_motion.color_cloud);
     free(magic_motion.tag_cloud);
     free(magic_motion.spatial_cloud);
@@ -298,6 +376,7 @@ MagicMotion_Finalize(void)
         SaveSensor(magic_motion.sensors[i].serial, &magic_motion.sensor_frustums[i]);
         SensorFinalize(&magic_motion.sensors[i]);
         free(magic_motion.sensor_frames[i].color_frame);
+        free(magic_motion.sensor_masks[i]);
     }
 
     FinalizeSensorInterface();
@@ -349,7 +428,12 @@ void
 MagicMotion_CaptureFrame(void)
 {
     // The GetSensor*Frame functions will block for a while due to the
-    // camera hardware, so we wait until those are done before we take the mutex
+    // camera hardware, so we wait until those are done before we take the
+    // 3D mutex. The 2D classifiers uses the buffers we fill here however,
+    // so we need to take the mutex up here, and do the 2D classification
+    // during rendering / other work
+
+    pthread_mutex_lock(&magic_motion.classifier_thread_2D.mutex_handle);
 
     for(unsigned int i=0; i<magic_motion.num_active_sensors; ++i)
     {
@@ -362,7 +446,8 @@ MagicMotion_CaptureFrame(void)
         {
             Color c = (Color) { .r = color_frame[j].r,
                                 .g = color_frame[j].g,
-                                .b = color_frame[j].g
+                                .b = color_frame[j].g,
+                                ._padding = 0
                               };
 
             magic_motion.sensor_frames[i].color_frame[j] = c;
@@ -371,7 +456,7 @@ MagicMotion_CaptureFrame(void)
         magic_motion.sensor_frames[i].depth_frame = GetSensorDepthFrame(sensor);
     }
 
-    pthread_mutex_lock(&magic_motion.background_data.mutex_handle);
+    pthread_mutex_lock(&magic_motion.classifier_thread_3D.mutex_handle);
 
     magic_motion.cloud_size = 0;
     memset(magic_motion.voxels, 0, NUM_VOXELS*sizeof(Voxel));
@@ -408,6 +493,7 @@ MagicMotion_CaptureFrame(void)
             for(uint32_t x=0; x<w; ++x)
             {
                 float depth = depths[x+y*w];
+                float mask = magic_motion.sensor_masks[i][x+y*w];
                 if(depth > 0.0f)
                 {
                     float pos_x = tanf((((float)x/(float)w)-0.5f)*fov) * depth;
@@ -419,52 +505,53 @@ MagicMotion_CaptureFrame(void)
                                                  pos_y / 100.0f,
                                                  depth / 100.0f });
 
+                    /*{
+                        uint8_t val = (uint8_t)(255 * mask);
+                        colors[(color_w/2-w/2+x)+(color_h/2-h/2+y)*color_w] = (Color){
+                            .r = val, .g = val, .b = val
+                        };
+                    }*/
+
                     Color color = colors[(color_w/2-w/2+x)+(color_h/2-h/2+y)*color_w];
+
+                    // Remove fg/bg tags from previous pixel
+                    tag &= ~TAG_FOREGROUND;
+                    tag &= ~TAG_BACKGROUND;
 
                     // Check if the point is within the voxel grid
                     if(fabs(point.x) < BOUNDING_BOX_X/2.0f &&
                        fabs(point.y) < BOUNDING_BOX_Y/2.0f &&
                        fabs(point.z) < BOUNDING_BOX_Z/2.0f)
                     {
-                        /*
-                        uint32_t voxel_x = (uint32_t)(point.x / VOXEL_SIZE - 0.5f) +
-                                           NUM_VOXELS_X/2;
-                        uint32_t voxel_y = (uint32_t)(point.y / VOXEL_SIZE - 0.5f) +
-                                           NUM_VOXELS_Y/2;
-                        uint32_t voxel_z = (uint32_t)(point.z / VOXEL_SIZE - 0.5f) +
-                                           NUM_VOXELS_Z/2;
-
-                        uint32_t voxel_index = VOXEL_INDEX(voxel_x, voxel_y, voxel_z);
-                        */
-
-                        uint32_t voxel_index = WORLD_TO_VOXEL(point);
-
-                        Voxel *v = &magic_motion.voxels[voxel_index];
-
-                        // Add the current points color into the running average
-                        v->color.r = (uint8_t)((color.r + v->point_count * v->color.r) /
-                                               (v->point_count+1));
-                        v->color.g = (uint8_t)((color.g + v->point_count * v->color.g) /
-                                               (v->point_count+1));
-                        v->color.b = (uint8_t)((color.b + v->point_count * v->color.b) /
-                                               (v->point_count+1));
-
-                        ++v->point_count;
-
                         // Determine if the point is background or foreground
-                        float background_probability = _TrilinearlyInterpolate(point, magic_motion.background_data.background);
+                        float background_probability = _TrilinearlyInterpolate(point, magic_motion.background_model);
                         // Skip trilinear interpolation, and use nearest voxel instead:
                         // float background_probability = magic_motion.background_data.background[voxel_index];
+
+                        const float mix = 0.00075f; // 0 is only background model, 1 is only sensor mask
+                        background_probability = background_probability*(1.0f-mix) + (1.0f - mask)*mix;
 
                         if(background_probability < BACKGROUND_PROBABILITY_TRESHOLD)
                         {
                             tag |= TAG_FOREGROUND;
-                            tag &= ~TAG_BACKGROUND;
+
+                            uint32_t voxel_index = WORLD_TO_VOXEL(point);
+
+                            Voxel *v = &magic_motion.voxels[voxel_index];
+
+                            // Add the current points color into the running average
+                            v->color.r = (uint8_t)((color.r + v->point_count * v->color.r) /
+                                                   (v->point_count+1));
+                            v->color.g = (uint8_t)((color.g + v->point_count * v->color.g) /
+                                                   (v->point_count+1));
+                            v->color.b = (uint8_t)((color.b + v->point_count * v->color.b) /
+                                                   (v->point_count+1));
+
+                            ++v->point_count;
                         }
                         else
                         {
                             tag |= TAG_BACKGROUND;
-                            tag &= ~TAG_FOREGROUND;
                         }
                     }
 
@@ -478,8 +565,30 @@ MagicMotion_CaptureFrame(void)
         }
     }
 
-    pthread_mutex_unlock(&magic_motion.background_data.mutex_handle);
-    pthread_barrier_wait(&magic_motion.background_data.barrier);
+    // The naive classifier needs some help with noise
+    if(classifier3D == CLASSIFIER_3D_CALIBRATION_NAIVE)
+    {
+        for(int i=0; i<magic_motion.cloud_size; ++i)
+        {
+            uint32_t tag = magic_motion.tag_cloud[i];
+            if(tag & TAG_FOREGROUND)
+            {
+                // If it has been tagged as foreground, it will be within the
+                // voxel bounds, so the voxel_index will always be within bounds
+                uint32_t voxel_index = WORLD_TO_VOXEL(magic_motion.spatial_cloud[i]);
+                assert(voxel_index >= 0 && voxel_index < NUM_VOXELS);
+                if(magic_motion.voxels[voxel_index].point_count < 8)
+                {
+                    tag |= TAG_BACKGROUND;
+                    tag &= ~TAG_FOREGROUND;
+                    magic_motion.tag_cloud[i] = (MagicMotionTag)tag;
+                }
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&magic_motion.classifier_thread_3D.mutex_handle);
+    pthread_mutex_unlock(&magic_motion.classifier_thread_2D.mutex_handle);
 }
 
 void
@@ -541,9 +650,9 @@ MagicMotion_GetVoxels(void)
 }
 
 static void *
-_ComputeBackgroundModel(void *userdata)
+_ComputeBackgroundModelNaiveCalibration(void *userdata)
 {
-    BackgroundData *data = (BackgroundData *)userdata;
+    ClassifierData3D *data = (ClassifierData3D *)userdata;
 
     // A place to store a copy of the latest voxel frame
     Voxel *latest_frame = (Voxel *)malloc(NUM_VOXELS * sizeof(Voxel));
@@ -555,86 +664,52 @@ _ComputeBackgroundModel(void *userdata)
 
     while(data->running)
     {
-        // This barrier is only a good idea as long as the processing in this thread
-        // takes less than 30 ms
-        pthread_barrier_wait(&magic_motion.background_data.barrier);
-
         // Get last frame voxel grid.
-        // For the DL classifier we might want to feed it 4D data (+time), in
-        // which case we need to get multiple frames
-        pthread_mutex_lock(&data->mutex_handle);
         unsigned int frame_count = magic_motion.frame_count;
+        // Consider taking the mutex for this. The main thread might be writing
+        // to the voxel grid while memcpy runs.
         memcpy(latest_frame, magic_motion.voxels, NUM_VOXELS * sizeof(Voxel));
-        pthread_mutex_unlock(&data->mutex_handle);
-        // TODO(istarnion): A barrier would be much more useful here than
-        // mutexes. It would allow us to be more in sync with the camera loop
-        // as well.
-        // But we might not _want_ to be in sync.. We don't want the main thread
-        // to wait for this thread much
 
-        switch(background_classifier)
+        if(data->is_calibrating)
         {
-            case CLASSIFIER_CALIBRATION_NAIVE:
+            if(!was_calibrating_last_frame)
             {
-                if(data->is_calibrating)
-                {
-                    if(!was_calibrating_last_frame)
-                    {
-                        // This is the first frame of the calibration
-                        calibration_start_frame = frame_count;
-                        memset(avg_point_counts, 0, NUM_VOXELS * sizeof(float));
-                        was_calibrating_last_frame = true;
-                    }
-
-                    unsigned int framenum = frame_count - calibration_start_frame;
-
-                    for(uint32_t i=0; i<NUM_VOXELS; ++i)
-                    {
-                        float point_count = (float)latest_frame[i].point_count;
-                        /* Average: */
-                        // avg_point_counts[i] = (avg_point_counts[i] * framenum +
-                        //                        point_count) / (framenum+1);
-                        /* Max: */
-                        avg_point_counts[i] = MAX(avg_point_counts[i], point_count);
-                    }
-                }
-                else
-                {
-                    if(was_calibrating_last_frame)
-                    {
-                        // This is the first frame after we stop calibrating
-                        pthread_mutex_lock(&data->mutex_handle);
-
-                        for(uint32_t i=0; i<NUM_VOXELS; ++i)
-                        {
-                            float background_prob = MIN(1.0f, avg_point_counts[i]);
-                            data->background[i] = background_prob;
-                        }
-
-                        pthread_mutex_unlock(&data->mutex_handle);
-                    }
-
-                    was_calibrating_last_frame = false;
-                }
-
-                break;
+                // This is the first frame of the calibration
+                calibration_start_frame = frame_count;
+                memset(avg_point_counts, 0, NUM_VOXELS * sizeof(float));
+                memset(magic_motion.background_model, 0, NUM_VOXELS * sizeof(float));
+                was_calibrating_last_frame = true;
             }
-            case CLASSIFIER_DL:
-            {
-                // Process..
 
+            unsigned int framenum = frame_count - calibration_start_frame;
+
+            for(uint32_t i=0; i<NUM_VOXELS; ++i)
+            {
+                float point_count = (float)latest_frame[i].point_count;
+                /* Average: */
+                // avg_point_counts[i] = (avg_point_counts[i] * framenum +
+                //                        point_count) / (framenum+1);
+                /* Max: */
+                avg_point_counts[i] = MAX(avg_point_counts[i], point_count);
+            }
+        }
+        else
+        {
+            if(was_calibrating_last_frame)
+            {
+                // This is the first frame after we stop calibrating
                 pthread_mutex_lock(&data->mutex_handle);
 
                 for(uint32_t i=0; i<NUM_VOXELS; ++i)
                 {
-                    // TEMP: Set probability for background to
-                    // 100% for all voxels
-                    data->background[i] = 1.0f;
+                    float background_prob = MIN(1.0f, avg_point_counts[i]);
+                    magic_motion.background_model[i] = background_prob;
                 }
 
                 pthread_mutex_unlock(&data->mutex_handle);
-                break;
             }
+
+            was_calibrating_last_frame = false;
         }
     }
 
@@ -644,24 +719,140 @@ _ComputeBackgroundModel(void *userdata)
     return NULL;
 }
 
+static void *
+_ComputeBackgroundModelDL(void *userdata)
+{
+    ClassifierData3D *data = (ClassifierData3D *)userdata;
+
+    // A place to store a copy of the latest voxel frame
+    Voxel *latest_frame = (Voxel *)malloc(NUM_VOXELS * sizeof(Voxel));
+
+    while(data->running)
+    {
+        // Get last frame voxel grid.
+        // For the DL classifier we might want to feed it 4D data (+time), in
+        // which case we need to get multiple frames
+        pthread_mutex_lock(&data->mutex_handle);
+        unsigned int frame_count = magic_motion.frame_count;
+        memcpy(latest_frame, magic_motion.voxels, NUM_VOXELS * sizeof(Voxel));
+        pthread_mutex_unlock(&data->mutex_handle);
+
+        // Process
+        sleep(1);
+
+        pthread_mutex_lock(&data->mutex_handle);
+
+        for(uint32_t i=0; i<NUM_VOXELS; ++i)
+        {
+            // TEMP: Set probability for background to
+            // 100% for all voxels
+            magic_motion.background_model[i] = 1.0f;
+        }
+
+        pthread_mutex_unlock(&data->mutex_handle);
+    }
+
+    free(latest_frame);
+
+    return NULL;
+}
+
+static void *
+_ComputeBackgroundModelOpenCV(void *userdata)
+{
+    ClassifierData2D *data = (ClassifierData2D *)userdata;
+
+    cv::Mat frames[MAX_SENSORS];
+    cv::Mat masks[MAX_SENSORS];
+
+    cv::Ptr<cv::bgsegm::BackgroundSubtractorGSOC> subtractor =
+        cv::bgsegm::createBackgroundSubtractorGSOC();
+
+    float *input_imgs[MAX_SENSORS];
+    for(int i=0; i<magic_motion.num_active_sensors; ++i)
+    {
+        SensorInfo *sensor = &magic_motion.sensors[i];
+        input_imgs[i] = (float *)malloc(sensor->depth_stream_info.width*
+                                        sensor->depth_stream_info.height*
+                                        sizeof(float));
+    }
+
+    while(data->running)
+    {
+        for(int i=0; i<magic_motion.num_active_sensors; ++i)
+        {
+            SensorInfo *sensor = &magic_motion.sensors[i];
+
+            // Shortcuts/cache of commonly used widths/heights
+            const int cw = sensor->color_stream_info.width;
+            const int ch = sensor->color_stream_info.height;
+            const int dw = sensor->depth_stream_info.width;
+            const int dh = sensor->depth_stream_info.height;
+
+            float *depth_pixels = magic_motion.sensor_frames[i].depth_frame;
+            Color *color_pixels = magic_motion.sensor_frames[i].color_frame;
+            if(!(depth_pixels && color_pixels)) continue;
+
+            // We feed the subtractor a mix of the depth image signal and
+            // the grayscaled color image signal to try to get the
+            // best of both worlds
+            const float mix = 0.9f; // 0 is only depth, 1 is only color
+            const size_t num_pixels = dw * dh;
+            memcpy(input_imgs[i], depth_pixels, num_pixels*sizeof(float));
+            for(size_t j=0; j<num_pixels; ++j)
+            {
+                int cx = (cw-dw)/2 + j%dw;
+                int cy = (ch-dh)/2 + j/dw;
+                Color c = color_pixels[cx+cy*cw];
+
+                // Grayscale
+                float value = (c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f) / 255.0f;
+
+                // Mix the signals
+                input_imgs[i][j] = input_imgs[i][j] * (1.0f-mix) + value * mix;
+            }
+
+            frames[i] = cv::Mat(sensor->depth_stream_info.height, // Rows
+                                sensor->depth_stream_info.width,  // Cols
+                                CV_32FC1,                         // Type
+                                input_imgs[i]);                   // Data
+
+            subtractor->apply(frames[i], masks[i]);
+
+            float *mask = magic_motion.sensor_masks[i];
+            masks[i].forEach<uint8_t>(
+                [mask, cw, ch, dw, dh](uint8_t &m, const int position[]) -> void
+                {
+                    int x = position[1], y = position[0];
+                    mask[x + y * dw] = m / 255.0f;
+                });
+        }
+    }
+
+    for(int i=0; i<magic_motion.num_active_sensors; ++i)
+    {
+        free(input_imgs[i]);
+    }
+
+    return NULL;
+}
+
 void
 MagicMotion_StartCalibration(void)
 {
-    background_classifier = CLASSIFIER_CALIBRATION_NAIVE;
-    magic_motion.background_data.is_calibrating = true;
+    magic_motion.classifier_thread_3D.is_calibrating = true;
 }
 
 void
 MagicMotion_EndCalibration(void)
 {
-    magic_motion.background_data.is_calibrating = false;
+    magic_motion.classifier_thread_3D.is_calibrating = false;
 }
 
 bool
 MagicMotion_IsCalibrating(void)
 {
-    return background_classifier == CLASSIFIER_CALIBRATION_NAIVE &&
-           magic_motion.background_data.is_calibrating;
+    return magic_motion.classifier_thread_3D.is_calibrating;
 }
 
 #ifdef __cplusplus

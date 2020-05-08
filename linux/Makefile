@@ -8,8 +8,8 @@ ifndef OPENNI2_INCLUDE
 	error OPENNI2_INCLUDE is not set
 endif
 
-CFLAGS=-shared -fPIC -g -I ../src -I ${OPENNI2_INCLUDE}
-LIBS=-L$(OPENNI2_REDIST) -lOpenNI2 -pthreads
+CFLAGS=-shared -fPIC -g -I ../src -I ${OPENNI2_INCLUDE} $(shell pkg-config opencv4 --cflags)
+LIBS=-L$(OPENNI2_REDIST) -lOpenNI2 -pthreads $(shell pkg-config opencv4 --libs)
 
 SRC=$(shell find launchpad -name '*.cpp')
 HEADERS=$(shell find launchpad -name '*.h')

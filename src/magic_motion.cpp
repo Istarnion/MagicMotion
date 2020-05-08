@@ -21,7 +21,9 @@ extern "C" {
 #endif
 
 #define RUN_TESTS 1
-#define BACKGROUND_PROBABILITY_TRESHOLD 0.001
+#define BACKGROUND_PROBABILITY_TRESHOLD 0.25
+
+#define LERP(a, b, t) ((a)*(1.0f-(t)) + (b)*(t))
 
 // The 3D classifiers create a voxel grid
 // background model each point in the cloud
@@ -88,6 +90,7 @@ static struct
 
     Voxel voxels[NUM_VOXELS];    // The voxel grid, with the lastest information
 
+    // Thread userdata
     ClassifierData3D classifier_thread_3D;
     ClassifierData2D classifier_thread_2D;
 } magic_motion;
@@ -468,8 +471,6 @@ MagicMotion_CaptureFrame(void)
         Color      *colors = magic_motion.sensor_frames[i].color_frame;
         DepthPixel *depths = magic_motion.sensor_frames[i].depth_frame;
 
-        int tag = (TAG_CAMERA_0 + i);
-
         // NOTE(istarnion): The color and depth streams does often
         // NOT have the same resolution, especially with image
         // registration enabled, but depth resolution is always
@@ -505,18 +506,9 @@ MagicMotion_CaptureFrame(void)
                                                  pos_y / 100.0f,
                                                  depth / 100.0f });
 
-                    /*{
-                        uint8_t val = (uint8_t)(255 * mask);
-                        colors[(color_w/2-w/2+x)+(color_h/2-h/2+y)*color_w] = (Color){
-                            .r = val, .g = val, .b = val
-                        };
-                    }*/
-
                     Color color = colors[(color_w/2-w/2+x)+(color_h/2-h/2+y)*color_w];
 
-                    // Remove fg/bg tags from previous pixel
-                    tag &= ~TAG_FOREGROUND;
-                    tag &= ~TAG_BACKGROUND;
+                    int tag = (TAG_CAMERA_0 + i);
 
                     // Check if the point is within the voxel grid
                     if(fabs(point.x) < BOUNDING_BOX_X/2.0f &&
@@ -528,10 +520,11 @@ MagicMotion_CaptureFrame(void)
                         // Skip trilinear interpolation, and use nearest voxel instead:
                         // float background_probability = magic_motion.background_data.background[voxel_index];
 
-                        const float mix = 0.00075f; // 0 is only background model, 1 is only sensor mask
-                        background_probability = background_probability*(1.0f-mix) + (1.0f - mask)*mix;
+                        const float mix = 0.1f; // 0 is only background model, 1 is only sensor mask
+                        background_probability = LERP(background_probability, (1.0f - mask), mix);
 
-                        if(background_probability < BACKGROUND_PROBABILITY_TRESHOLD)
+                        if(background_probability < BACKGROUND_PROBABILITY_TRESHOLD ||
+                           magic_motion.classifier_thread_3D.is_calibrating)
                         {
                             tag |= TAG_FOREGROUND;
 
@@ -711,6 +704,8 @@ _ComputeBackgroundModelNaiveCalibration(void *userdata)
 
             was_calibrating_last_frame = false;
         }
+
+        pthread_yield();
     }
 
     free(avg_point_counts);
@@ -750,6 +745,8 @@ _ComputeBackgroundModelDL(void *userdata)
         }
 
         pthread_mutex_unlock(&data->mutex_handle);
+
+        pthread_yield();
     }
 
     free(latest_frame);
@@ -796,7 +793,7 @@ _ComputeBackgroundModelOpenCV(void *userdata)
             // We feed the subtractor a mix of the depth image signal and
             // the grayscaled color image signal to try to get the
             // best of both worlds
-            const float mix = 0.9f; // 0 is only depth, 1 is only color
+            const float mix = 0.95f; // 0 is only depth, 1 is only color
             const size_t num_pixels = dw * dh;
             memcpy(input_imgs[i], depth_pixels, num_pixels*sizeof(float));
             for(size_t j=0; j<num_pixels; ++j)
@@ -809,7 +806,7 @@ _ComputeBackgroundModelOpenCV(void *userdata)
                 float value = (c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f) / 255.0f;
 
                 // Mix the signals
-                input_imgs[i][j] = input_imgs[i][j] * (1.0f-mix) + value * mix;
+                input_imgs[i][j] = LERP(input_imgs[i][j], value, mix);
             }
 
             frames[i] = cv::Mat(sensor->depth_stream_info.height, // Rows
@@ -819,6 +816,7 @@ _ComputeBackgroundModelOpenCV(void *userdata)
 
             subtractor->apply(frames[i], masks[i]);
 
+            pthread_mutex_lock(&data->mutex_handle);
             float *mask = magic_motion.sensor_masks[i];
             masks[i].forEach<uint8_t>(
                 [mask, cw, ch, dw, dh](uint8_t &m, const int position[]) -> void
@@ -826,7 +824,11 @@ _ComputeBackgroundModelOpenCV(void *userdata)
                     int x = position[1], y = position[0];
                     mask[x + y * dw] = m / 255.0f;
                 });
+
+            pthread_mutex_unlock(&data->mutex_handle);
         }
+
+        pthread_yield();
     }
 
     for(int i=0; i<magic_motion.num_active_sensors; ++i)

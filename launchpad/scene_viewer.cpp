@@ -10,8 +10,6 @@
 
 namespace viewer
 {
-    #define MAX_PARTICLES 128
-
     typedef enum
     {
         MANIPULATE_POSITION,
@@ -29,13 +27,6 @@ namespace viewer
         V3 *colors;
     } SensorRenderData;
 
-    typedef struct
-    {
-        V3 position;
-        V3 velocity;
-        float time_to_live;
-    } Particle;
-
     static const V3 colors[] = {
         (V3){ 1, 0, 0 },
         (V3){ 0, 1, 0 },
@@ -46,8 +37,6 @@ namespace viewer
     static SensorRenderData active_sensors[MAX_SENSORS];
     static int selected_sensor;
     static ImGuizmo::MODE gizmo_mode;
-
-    static Particle particles[MAX_PARTICLES];
 
     static Camera cam;
 
@@ -77,32 +66,6 @@ namespace viewer
         bool visualize_bgsub;
         bool remove_bg;
     } UI;
-
-    void
-    ParticleBurst(V3 origin)
-    {
-        int start_index = 0;
-        for(int i=0; i<MAX_PARTICLES; ++i)
-        {
-            if(particles[i].time_to_live <= 0)
-            {
-                start_index = i;
-                break;
-            }
-        }
-
-        for(int i=start_index; i<start_index+16; ++i)
-        {
-            int index = i % MAX_PARTICLES;
-            V3 dir = NormalizeV3(SubV3(cam.position, origin));
-            dir.x += ((float)rand() / (float)RAND_MAX) - 0.5f;
-            dir.y += ((float)rand() / (float)RAND_MAX) - 0.5f;
-            dir.z *= 2.0f;
-            particles[index].position = origin;
-            particles[index].time_to_live = 2.0f;
-            particles[index].velocity = ScaleV3(dir, 10.0f);
-        }
-    }
 
     bool
     SceneInit(void)
@@ -501,17 +464,6 @@ namespace viewer
             if(active_sensors[i].show_frustum)
             {
                 RenderFrustum(&active_sensors[i].frustum);
-            }
-        }
-
-        for(int i=0; i<MAX_PARTICLES; ++i)
-        {
-            if(particles[i].time_to_live > 0)
-            {
-                particles[i].velocity = AddV3(particles[i].velocity, ScaleV3((V3){ 0, -20.0f, 0 }, dt));
-                particles[i].position = AddV3(particles[i].position, ScaleV3(particles[i].velocity, dt));
-                particles[i].time_to_live -= dt;
-                RenderCube(particles[i].position, (V3){ 0.1f, 0.1f, 0.1f });
             }
         }
     }

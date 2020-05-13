@@ -85,20 +85,17 @@ namespace viewer
             const char *serial = MagicMotion_GetCameraSerialNumber(i);
             const char *nick;
 
-            // EXAMPLE
-            /*
             if(strcmp(serial, "18110830920") == 0)
             {
                 nick = "Fremst";
             }
             else
             {
-                nick = "Astra";
+                nick = MagicMotion_GetCameraName(i);
             }
 
             snprintf(active_sensors[i].name, 128, "%s (%s)",
                      nick, serial);
-            */
         }
 
         selected_sensor = 0;

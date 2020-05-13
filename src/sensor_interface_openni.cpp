@@ -216,7 +216,9 @@ GetSensorColorFrame(SensorInfo *sensor)
     Sensor *s = sensor->sensor_data;
 
     openni::Status rc;
+    puts("Ready to read color frame");
     rc = s->color_stream.readFrame(&s->color_frame_ref);
+    puts("Read sensor frame");
     if(rc != openni::STATUS_OK)
     {
         fprintf(stderr, "OpenNI2 Error %d at %s:%d\n%s\n",

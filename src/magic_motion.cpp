@@ -20,10 +20,15 @@
 extern "C" {
 #endif
 
-#define RUN_TESTS 1
-#define BACKGROUND_PROBABILITY_TRESHOLD 0.25
+#define RUN_TESTS 0
+#define MAGIC_MOTION_TRACE 1
+#if MAGIC_MOTION_TRACE
+#define MM_TRACE(title) printf("MagicMotion Trace @ l%d: %s\n", __LINE__, title)
+#else
+#define MM_TRACE(title)
+#endif
 
-#define LERP(a, b, t) ((a)*(1.0f-(t)) + (b)*(t))
+#define BACKGROUND_PROBABILITY_TRESHOLD 0.25
 
 // The 3D classifiers create a voxel grid
 // background model each point in the cloud
@@ -45,8 +50,8 @@ enum Classifier2D
     CLASSIFIER_2D_OPENCV
 };
 
-static const Classifier3D classifier3D = CLASSIFIER_3D_CALIBRATION_NAIVE;
-static const Classifier2D classifier2D = CLASSIFIER_2D_OPENCV;
+static const Classifier3D classifier3D = CLASSIFIER_3D_NONE;
+static const Classifier2D classifier2D = CLASSIFIER_2D_NONE;
 
 struct ClassifierData3D
 {
@@ -174,6 +179,10 @@ static void *_ComputeBackgroundModelOpenCV(void *userdata);
 void
 MagicMotion_Initialize(void)
 {
+    MM_TRACE("Initializing");
+
+    // Simple tests to aid in debugging and development.
+    // Replace this with a proper testing framework
 #if RUN_TESTS
     puts("Running tests");
 
@@ -236,10 +245,10 @@ MagicMotion_Initialize(void)
                 p.x, p.y, p.z,
                 v.x, v.y, v.z,
                 a, b, c, a*b*c);
-
     }
 
     puts("End of testing.");
+    MM_TRACE("Initial tests complete");
 #endif
 
     InitializeSensorInterface();
@@ -251,6 +260,7 @@ MagicMotion_Initialize(void)
     magic_motion.cloud_size = 0;
     magic_motion.cloud_capacity = 0;
     magic_motion.num_active_sensors = PollSensorList(magic_motion.sensors, MAX_SENSORS);
+    printf("Found %d compatible sensors\n", magic_motion.num_active_sensors);
     for(int i=0; i<magic_motion.num_active_sensors; ++i)
     {
         SensorInfo *sensor = &magic_motion.sensors[i];
@@ -259,6 +269,10 @@ MagicMotion_Initialize(void)
         {
             fprintf(stderr, "Failed to initialize %s %s (URI: %s).\n", sensor->vendor, sensor->name, sensor->URI);
             return;
+        }
+        else
+        {
+            printf("Initialized %s %s (URI: %s).\n", sensor->vendor, sensor->name, sensor->URI);
         }
 
         magic_motion.sensor_frustums[i] = (Frustum){
@@ -297,13 +311,25 @@ MagicMotion_Initialize(void)
         }
     }
 
-    magic_motion.spatial_cloud = (V3 *)calloc(magic_motion.cloud_capacity, sizeof(V3));
+    MM_TRACE("Sensors initialized");
+
+    magic_motion.spatial_cloud = (V3 *)calloc(magic_motion.cloud_capacity,
+                                              sizeof(V3));
+    assert(magic_motion.spatial_cloud);
+
     magic_motion.tag_cloud = (MagicMotionTag *)calloc(magic_motion.cloud_capacity,
                                                       sizeof(MagicMotionTag));
-    magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity, sizeof(Color));
+    assert(magic_motion.tag_cloud);
+
+    magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity,
+                                               sizeof(Color));
+    assert(magic_motion.color_cloud);
 
     magic_motion.background_model = (float *)calloc(NUM_VOXELS,
                                                     sizeof(float));
+    assert(magic_motion.background_model);
+
+    MM_TRACE("Global buffers allocated");
 
     pthread_attr_t thread_attributes;
     pthread_attr_init(&thread_attributes); // Set default attributes
@@ -350,6 +376,8 @@ MagicMotion_Initialize(void)
 
     pthread_attr_destroy(&thread_attributes);
 
+    MM_TRACE("Background thread(s) started");
+
     printf("MagicMotion initialized with %u active sensors. Point cloud size: %u. %u voxels.\n",
            magic_motion.num_active_sensors, magic_motion.cloud_capacity, NUM_VOXELS);
 }
@@ -357,22 +385,27 @@ MagicMotion_Initialize(void)
 void
 MagicMotion_Finalize(void)
 {
+    MM_TRACE("Finalizing");
     if(magic_motion.classifier_thread_3D.running)
     {
         magic_motion.classifier_thread_3D.running = false;
         pthread_join(magic_motion.classifier_thread_3D.thread_handle, NULL);
+        MM_TRACE("Ended 3D classifier thread");
     }
 
     if(magic_motion.classifier_thread_2D.running)
     {
         magic_motion.classifier_thread_2D.running = false;
         pthread_join(magic_motion.classifier_thread_2D.thread_handle, NULL);
+        MM_TRACE("Ended 2D classifier thread");
     }
+
 
     free(magic_motion.background_model);
     free(magic_motion.color_cloud);
     free(magic_motion.tag_cloud);
     free(magic_motion.spatial_cloud);
+    MM_TRACE("Freed global buffers");
 
     for(int i=0; i<magic_motion.num_active_sensors; ++i)
     {
@@ -381,6 +414,7 @@ MagicMotion_Finalize(void)
         free(magic_motion.sensor_frames[i].color_frame);
         free(magic_motion.sensor_masks[i]);
     }
+    MM_TRACE("Closed all sensors");
 
     FinalizeSensorInterface();
 }
@@ -430,6 +464,8 @@ MagicMotion_SetCameraTransform(unsigned int camera_index, Mat4 transform)
 void
 MagicMotion_CaptureFrame(void)
 {
+    MM_TRACE("Starting frame capture");
+
     // The GetSensor*Frame functions will block for a while due to the
     // camera hardware, so we wait until those are done before we take the
     // 3D mutex. The 2D classifiers uses the buffers we fill here however,
@@ -437,13 +473,16 @@ MagicMotion_CaptureFrame(void)
     // during rendering / other work
 
     pthread_mutex_lock(&magic_motion.classifier_thread_2D.mutex_handle);
+    MM_TRACE("Got the 2D mutex");
 
-    for(unsigned int i=0; i<magic_motion.num_active_sensors; ++i)
+    for(size_t i=0; i<magic_motion.num_active_sensors; ++i)
     {
         SensorInfo *sensor = &magic_motion.sensors[i];
+        printf("Sensor %s %s (URI: %s)\n", sensor->vendor, sensor->name, sensor->URI);
         ColorPixel *color_frame = GetSensorColorFrame(sensor);
         size_t num_color_pixels = sensor->color_stream_info.width *
                                   sensor->color_stream_info.height;
+        MM_TRACE("Got color frame");
 
         for(size_t j=0; j<num_color_pixels; ++j)
         {
@@ -457,9 +496,11 @@ MagicMotion_CaptureFrame(void)
         }
 
         magic_motion.sensor_frames[i].depth_frame = GetSensorDepthFrame(sensor);
+        MM_TRACE("Got depth frame");
     }
 
     pthread_mutex_lock(&magic_motion.classifier_thread_3D.mutex_handle);
+    MM_TRACE("Got 3D mutex");
 
     magic_motion.cloud_size = 0;
     memset(magic_motion.voxels, 0, NUM_VOXELS*sizeof(Voxel));
@@ -467,6 +508,7 @@ MagicMotion_CaptureFrame(void)
 
     for(unsigned int i=0; i<magic_motion.num_active_sensors; ++i)
     {
+        MM_TRACE("Starting computation on sensor");
         SensorInfo *sensor = &magic_motion.sensors[i];
         Color      *colors = magic_motion.sensor_frames[i].color_frame;
         DepthPixel *depths = magic_motion.sensor_frames[i].depth_frame;
@@ -531,6 +573,7 @@ MagicMotion_CaptureFrame(void)
                             uint32_t voxel_index = WORLD_TO_VOXEL(point);
 
                             Voxel *v = &magic_motion.voxels[voxel_index];
+                            assert(v); // The voxel should never be NULL.
 
                             // Add the current points color into the running average
                             v->color.r = (uint8_t)((color.r + v->point_count * v->color.r) /
@@ -582,6 +625,7 @@ MagicMotion_CaptureFrame(void)
 
     pthread_mutex_unlock(&magic_motion.classifier_thread_3D.mutex_handle);
     pthread_mutex_unlock(&magic_motion.classifier_thread_2D.mutex_handle);
+    MM_TRACE("Finished frame capture");
 }
 
 void

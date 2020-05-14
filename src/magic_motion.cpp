@@ -2,7 +2,7 @@
 #include <pthread.h>
 #include <assert.h>
 
-#include "opencv2/video.hpp"
+// #include "opencv2/video.hpp"
 #include <opencv2/video/background_segm.hpp>
 #include <opencv2/bgsegm.hpp>
 
@@ -21,7 +21,7 @@ extern "C" {
 #endif
 
 #define RUN_TESTS 0
-#define MAGIC_MOTION_TRACE 1
+#define MAGIC_MOTION_TRACE 0
 #if MAGIC_MOTION_TRACE
 #define MM_TRACE(title) printf("MagicMotion Trace @ l%d: %s\n", __LINE__, title)
 #else
@@ -749,7 +749,7 @@ _ComputeBackgroundModelNaiveCalibration(void *userdata)
             was_calibrating_last_frame = false;
         }
 
-        pthread_yield();
+        sched_yield();
     }
 
     free(avg_point_counts);
@@ -790,7 +790,7 @@ _ComputeBackgroundModelDL(void *userdata)
 
         pthread_mutex_unlock(&data->mutex_handle);
 
-        pthread_yield();
+        sched_yield();
     }
 
     free(latest_frame);
@@ -872,7 +872,7 @@ _ComputeBackgroundModelOpenCV(void *userdata)
             pthread_mutex_unlock(&data->mutex_handle);
         }
 
-        pthread_yield();
+        sched_yield();
     }
 
     for(int i=0; i<magic_motion.num_active_sensors; ++i)

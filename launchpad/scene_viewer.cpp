@@ -1,5 +1,8 @@
 #include "scene_viewer.h"
 
+#include <opencv2/bgsegm.hpp>
+#include <opencv2/video/background_segm.hpp>
+
 #include <SDL.h>
 #include "magic_motion.h"
 #include "renderer.h"
@@ -43,6 +46,7 @@ namespace viewer
     static VideoRecorder *video_recorder;
 
     static void *sensor_preview;
+    static void *ocv_test_texture;
 
     enum UIMode
     {
@@ -59,6 +63,12 @@ namespace viewer
         bool sensor_view_open;
         int camera_index;
         int color_feed;
+
+        bool opencv_view_open;
+        int ocv_camera_index;
+        int ocv_color_feed;
+        int bgsub_algo;
+        cv::Ptr<cv::BackgroundSubtractor> ocv_subtractor;
 
         bool render_point_cloud;
         bool render_voxels;
@@ -140,6 +150,7 @@ namespace viewer
 
             ImGui::MenuItem("Video Recording", NULL, &UI.video_window_open);
             ImGui::MenuItem("Sensor View", NULL, &UI.sensor_view_open);
+            ImGui::MenuItem("OpenCV comparison", NULL, &UI.opencv_view_open);
 
             ImGui::EndMenu();
         }
@@ -323,6 +334,95 @@ namespace viewer
 
             ImGui::Image(sensor_preview, ImVec2(width, height));
             ImGui::Text("(%d x %d)", width, height);
+
+            ImGui::End();
+        }
+
+        if(UI.opencv_view_open)
+        {
+            ImGui::Begin("OpenCV Comparison", &UI.opencv_view_open);
+
+            for(int i=0; i<num_active_sensors; ++i)
+            {
+                ImGui::PushID(i);
+                ImGui::RadioButton(active_sensors[i].name, &UI.ocv_camera_index, i);
+                ImGui::PopID();
+            }
+
+            // Using bitwise OR instead of logical because we do NOT want
+            // shortcutting here. If any of these options change we want to recreate
+            // the subtractor.
+            if((ImGui::RadioButton("Color Feed", &UI.ocv_color_feed, 1) |
+                ImGui::RadioButton("Depth Feed", &UI.ocv_color_feed, 0) |
+
+                ImGui::RadioButton("MOG2", &UI.bgsub_algo, 0) |
+                ImGui::RadioButton("KNN",  &UI.bgsub_algo, 1) |
+                ImGui::RadioButton("GSOC", &UI.bgsub_algo, 2)) ||
+               !UI.ocv_subtractor)
+            {
+                switch(UI.bgsub_algo)
+                {
+                    case 0: // MOG2
+                        UI.ocv_subtractor = cv::createBackgroundSubtractorMOG2();
+                        break;
+                    case 1: // KNN
+                        UI.ocv_subtractor = cv::createBackgroundSubtractorKNN();
+                        break;
+                    case 2: // GSOC
+                        UI.ocv_subtractor = cv::bgsegm::createBackgroundSubtractorGSOC();
+                        break;
+                }
+            }
+
+            if(ocv_test_texture)
+            {
+                RendererDestroyTexture(ocv_test_texture);
+            }
+
+            cv::Mat input_frame, output_frame;
+            int width, height;
+
+            if(UI.ocv_color_feed)
+            {
+                MagicMotion_GetColorImageResolution(UI.ocv_camera_index, &width, &height);
+                const Color *pixels = MagicMotion_GetColorImage(UI.ocv_camera_index);
+                float values[width*height];
+                for(size_t i=0; i<width*height; ++i)
+                {
+                    Color c = pixels[i];
+                    float value = (c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f) / 255.0f;
+                    values[i] = value;
+                }
+
+                input_frame = cv::Mat(height, width, CV_32FC1, values);
+            }
+            else
+            {
+                MagicMotion_GetDepthImageResolution(UI.ocv_camera_index, &width, &height);
+                const float *depth_pixels = MagicMotion_GetDepthImage(UI.ocv_camera_index);
+                float values[width*height];
+                memcpy(values, depth_pixels, width*height*sizeof(float));
+                input_frame = cv::Mat(height, width, CV_32FC1, values);
+            }
+
+            UI.ocv_subtractor->apply(input_frame, output_frame);
+
+            // Convert the 8-bit mask to 32-bit ARGB values
+            uint32_t mask[width * height];
+            output_frame.forEach<uint8_t>(
+                [width, &mask](uint8_t &m, const int position[]) -> void
+                {
+                    int x = position[1], y = position[0];
+                    uint32_t value = 0xFF000000 |
+                                     (m << 16)  |
+                                     (m << 8)   |
+                                      m;
+
+                    mask[x + y * width] = value;
+                });
+
+            ocv_test_texture = RendererCreateTexture(mask, width, height);
+            ImGui::Image(ocv_test_texture, ImVec2(width, height));
 
             ImGui::End();
         }

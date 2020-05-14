@@ -7,13 +7,13 @@ else
 	OS=Linux
 endif
 
-CFLAGS=-g $(shell sdl2-config --cflags) -I src -I imgui -I ImGuizmo -I miniz -std=c++11
-LIBS=-lSDL2 -L$(OPENNI2_REDIST) -lOpenNI2 -lMagicMotion -lm
+CFLAGS=-g $(shell sdl2-config --cflags) -I src -I imgui -I ImGuizmo -I miniz -std=c++11 $(shell pkg-config opencv4 --cflags)
+LIBS=-lSDL2 -L$(OPENNI2_REDIST) -lOpenNI2 -lMagicMotion -lm $(shell pkg-config opencv4 --libs)
 
 ifeq (${OS},macOS)
 	LIBS += -lc++ -framework OpenGl -framework CoreFoundation
 	MAGICMOTION=libMagicMotion.dylib
-	MAGICMOTION_PATH=macOS/Build/Debug
+	MAGICMOTION_PATH=macOS/Build/Release
 else
 	LIBS += -L. -lstdc++ -Wl,-rpath,.
 	MAGICMOTION=libMagicMotion.so
@@ -31,7 +31,7 @@ ${EXE}: ${SRC} ${HEADERS} ${MAGICMOTION}
 	${CC} ${CFLAGS} launchpad/main.cpp -o $@ ${LIBS}
 
 ${MAGICMOTION}: $(shell find src -type f) ${MAGICMOTION_PATH}/${MAGICMOTION}
-	[[ `uname` = Darwin ]] && pushd macOS && xcodebuild || pushd linux && make -B
+	[[ `uname` = Darwin ]] && pushd macOS && xcodebuild && popd || pushd linux && make -B
 	cp ${MAGICMOTION_PATH}/${MAGICMOTION} ./
 
 .PHONY: clean

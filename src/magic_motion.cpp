@@ -478,7 +478,6 @@ MagicMotion_CaptureFrame(void)
     for(size_t i=0; i<magic_motion.num_active_sensors; ++i)
     {
         SensorInfo *sensor = &magic_motion.sensors[i];
-        printf("Sensor %s %s (URI: %s)\n", sensor->vendor, sensor->name, sensor->URI);
         ColorPixel *color_frame = GetSensorColorFrame(sensor);
         size_t num_color_pixels = sensor->color_stream_info.width *
                                   sensor->color_stream_info.height;

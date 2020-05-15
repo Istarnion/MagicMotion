@@ -363,10 +363,10 @@ namespace viewer
                 switch(UI.bgsub_algo)
                 {
                     case 0: // MOG2
-                        UI.ocv_subtractor = cv::createBackgroundSubtractorMOG2();
+                        UI.ocv_subtractor = cv::createBackgroundSubtractorMOG2(500, 16, false);
                         break;
                     case 1: // KNN
-                        UI.ocv_subtractor = cv::createBackgroundSubtractorKNN();
+                        UI.ocv_subtractor = cv::createBackgroundSubtractorKNN(500, 400, false);
                         break;
                     case 2: // GSOC
                         UI.ocv_subtractor = cv::bgsegm::createBackgroundSubtractorGSOC();

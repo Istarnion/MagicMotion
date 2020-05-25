@@ -31,7 +31,11 @@ ${EXE}: ${SRC} ${HEADERS} ${MAGICMOTION}
 	${CC} ${CFLAGS} launchpad/main.cpp -o $@ ${LIBS}
 
 ${MAGICMOTION}: $(shell find src -type f) ${MAGICMOTION_PATH}/${MAGICMOTION}
-	[[ `uname` = Darwin ]] && pushd macOS && xcodebuild && popd || pushd linux && make -B
+ifeq (${OS},macOS)
+	pushd macOS && xcodebuild && popd
+else
+	pushd linux && make -B && popd
+endif
 	cp ${MAGICMOTION_PATH}/${MAGICMOTION} ./
 
 .PHONY: clean

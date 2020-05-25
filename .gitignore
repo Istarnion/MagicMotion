@@ -8,3 +8,4 @@ OpenNI2/
 *.so
 *.dylib
 macOS/Build/
+macOS/MagicMotion.xcodeproj/

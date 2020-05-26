@@ -6,6 +6,82 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+struct _sensor;
+
+struct OpenNIFrameListener : public openni::VideoStream::NewFrameListener
+{
+    const char *name;
+    int width, height;
+    bool is_depth;
+    void *data;
+    openni::VideoFrameRef frame_ref;
+
+    virtual void onNewFrame(openni::VideoStream &video_stream)
+    {
+        openni::Status rc;
+        rc = video_stream.readFrame(&frame_ref);
+        if(rc != openni::STATUS_OK)
+        {
+            fprintf(stderr, "OpenNI2 Error %d at %s:%d\n%s\n",
+                    rc, __FILE__, __LINE__,
+                    openni::OpenNI::getExtendedError());
+            assert(false);
+        }
+
+#if 0
+        assert(width == frame_ref.getWidth() &&
+               height == frame_ref.getHeight());
+#else
+        if(width != frame_ref.getWidth() || height != frame_ref.getHeight())
+        {
+            printf("WARNING: %s got %s frame (%d x %d), but expected (%d x %d)\n",
+                   name, is_depth ? "depth" : "color",
+                   frame_ref.getWidth(), frame_ref.getHeight(),
+                   width, height);
+            return;
+        }
+#endif
+
+        const void *frame = frame_ref.getData();
+        if(frame)
+        {
+            if(is_depth)
+            {
+                DepthPixel *pixel = (DepthPixel *)data;
+                // openni::DepthPixel is a 16 bit unsigned integer (uint16_t)
+                const openni::DepthPixel *src = (const openni::DepthPixel *)frame;
+                const int num_pixels = width * height;
+                for(int i = 0; i < num_pixels; ++i)
+                {
+                    *pixel = (float)*src;
+                    ++src;
+                    ++pixel;
+                }
+            }
+            else
+            {
+                memcpy(data, frame, width*height*sizeof(ColorPixel));
+            }
+        }
+        else
+        {
+            fprintf(stderr, "%s got %s frame with no data\n",
+                    name, is_depth ? "depth" : "color");
+        }
+
+        frame_ref.release();
+
+#if 1 // Debugging
+        openni::VideoMode mode = video_stream.getVideoMode();
+        int w = mode.getResolutionX();
+        int h = mode.getResolutionY();
+        int fps = mode.getFps();
+        printf("%s got %s frame from video stream (%d x %d) @ %d FPS\n",
+               name, is_depth ? "depth" : "color", w, h, fps);
+#endif
+    }
+};
+
 typedef struct _sensor
 {
     openni::Device oni_device;
@@ -13,11 +89,14 @@ typedef struct _sensor
     openni::VideoStream color_stream;
     openni::VideoFrameRef color_frame_ref;
     ColorPixel *color_frame;
+    OpenNIFrameListener *color_frame_listener;
 
     openni::VideoStream depth_stream;
     openni::VideoFrameRef depth_frame_ref;
     DepthPixel *depth_frame;
+    OpenNIFrameListener *depth_frame_listener;
 } Sensor;
+
 
 void
 InitializeSensorInterface(void)
@@ -131,6 +210,14 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
 
         s->color_frame = (ColorPixel *)calloc(sensor->color_stream_info.width * sensor->color_stream_info.height,
                                               sizeof(ColorPixel));
+
+        s->color_frame_listener = new OpenNIFrameListener();
+        s->color_frame_listener->name = sensor->URI;
+        s->color_frame_listener->width = vmode.getResolutionX();
+        s->color_frame_listener->height = vmode.getResolutionY();
+        s->color_frame_listener->is_depth = false;
+        s->color_frame_listener->data = s->color_frame;
+        s->color_stream.addNewFrameListener(s->color_frame_listener);
     }
     else
     {
@@ -159,6 +246,13 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
             return -5;
         }
 
+        // Try to enable image registration mode if supported
+        if(enable_color && s->oni_device.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
+        {
+            printf("Enabling image registration mode on %s (%s)\n", sensor->name, sensor->serial);
+            s->oni_device.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
+        }
+
         const openni::VideoMode &vmode = s->depth_stream.getVideoMode();
         sensor->depth_stream_info.width = vmode.getResolutionX();
         sensor->depth_stream_info.height = vmode.getResolutionY();
@@ -171,12 +265,13 @@ SensorInitialize(SensorInfo *sensor, bool enable_color, bool enable_depth)
         s->depth_frame = (DepthPixel *)calloc(sensor->depth_stream_info.width * sensor->depth_stream_info.height,
                                               sizeof(DepthPixel));
 
-        // Try to enable image registration mode if supported
-        if(enable_color && s->oni_device.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
-        {
-            printf("Enabling image registration mode on %s (%s)\n", sensor->name, sensor->serial);
-            s->oni_device.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
-        }
+        s->depth_frame_listener = new OpenNIFrameListener();
+        s->depth_frame_listener->name = sensor->URI;
+        s->depth_frame_listener->width = vmode.getResolutionX();
+        s->depth_frame_listener->height = vmode.getResolutionY();
+        s->depth_frame_listener->is_depth = true;
+        s->depth_frame_listener->data = s->depth_frame;
+        s->depth_stream.addNewFrameListener(s->depth_frame_listener);
     }
     else
     {
@@ -192,20 +287,29 @@ SensorFinalize(SensorInfo *sensor)
     if(sensor->sensor_data)
     {
         printf("Finalizing sensor %s\n", sensor->serial);
+        Sensor *s = sensor->sensor_data;
 
-        if(sensor->sensor_data->color_frame)
+        if(s->color_frame)
         {
-            sensor->sensor_data->color_stream.destroy();
+            s->color_stream.stop();
+            s->color_stream.removeNewFrameListener(s->color_frame_listener);
+            delete s->color_frame_listener;
+            s->color_frame_listener = NULL;
+            s->color_stream.destroy();
             free(sensor->sensor_data->color_frame);
         }
 
-        if(sensor->sensor_data->color_frame)
+        if(s->depth_frame)
         {
-            sensor->sensor_data->depth_stream.destroy();
-            free(sensor->sensor_data->depth_frame);
+            s->depth_stream.stop();
+            s->depth_stream.removeNewFrameListener(s->depth_frame_listener);
+            delete s->depth_frame_listener;
+            s->depth_frame_listener = NULL;
+            s->depth_stream.destroy();
+            free(s->depth_frame);
         }
 
-        delete sensor->sensor_data;
+        delete s;
         sensor->sensor_data = NULL;
     }
 }
@@ -214,44 +318,6 @@ ColorPixel *
 GetSensorColorFrame(SensorInfo *sensor)
 {
     Sensor *s = sensor->sensor_data;
-
-    openni::Status rc;
-    rc = s->color_stream.readFrame(&s->color_frame_ref);
-    if(rc != openni::STATUS_OK)
-    {
-        fprintf(stderr, "OpenNI2 Error %d at %s:%d\n%s\n",
-                rc, __FILE__, __LINE__,
-                openni::OpenNI::getExtendedError());
-        SensorFinalize(sensor);
-        assert(false);
-    }
-
-    assert(sensor->color_stream_info.width == s->color_frame_ref.getWidth() &&
-           sensor->color_stream_info.height == s->color_frame_ref.getHeight());
-
-    const openni::RGB888Pixel *color_data =
-        (const openni::RGB888Pixel *)s->color_frame_ref.getData();
-
-    if(color_data)
-    {
-        ColorPixel *pixel = s->color_frame;
-        int num_pixels = sensor->color_stream_info.width * sensor->color_stream_info.height;
-        for(int i = 0; i < num_pixels; ++i)
-        {
-            openni::RGB888Pixel color = *(color_data++);
-            pixel->r = (unsigned char)color.r;
-            pixel->g = (unsigned char)color.g;
-            pixel->b = (unsigned char)color.b;
-            ++pixel;
-        }
-    }
-    else
-    {
-        fprintf(stderr, "Got frame with no data.\n");
-    }
-
-    s->color_frame_ref.release();
-
     return s->color_frame;
 }
 
@@ -259,60 +325,6 @@ DepthPixel *
 GetSensorDepthFrame(SensorInfo *sensor)
 {
     Sensor *s = sensor->sensor_data;
-
-    openni::Status rc;
-    rc = s->depth_stream.readFrame(&s->depth_frame_ref);
-    if(rc != openni::STATUS_OK)
-    {
-        fprintf(stderr, "OpenNI2 Error %d at %s:%d\n%s\n",
-                rc, __FILE__, __LINE__,
-                openni::OpenNI::getExtendedError());
-        SensorFinalize(sensor);
-        assert(false);
-    }
-
-    assert(sensor->depth_stream_info.width == s->depth_frame_ref.getWidth() &&
-           sensor->depth_stream_info.height == s->depth_frame_ref.getHeight());
-
-    const openni::DepthPixel *depth_data =
-        (const openni::DepthPixel *)s->depth_frame_ref.getData();
-
-    if(depth_data)
-    {
-        DepthPixel *pixel = s->depth_frame;
-        int num_pixels = sensor->depth_stream_info.width * sensor->depth_stream_info.height;
-        for(int i = 0; i < num_pixels; ++i)
-        {
-            /*
-            if(*depth_data != 0)
-            {
-                // Only update the depth frame if the new pixel has a value
-            */
-                *pixel = (float)*depth_data;
-            /*
-            }
-            else if(*pixel != 0)
-            {
-                // Else, decay the value
-                *pixel += 5;
-                if(*pixel > sensor->depth_stream_info.max_depth)
-                {
-                    *pixel = 0;
-                }
-            }
-            */
-
-            ++depth_data;
-            ++pixel;
-        }
-    }
-    else
-    {
-        fprintf(stderr, "Got frame with no data.\n");
-    }
-
-    s->depth_frame_ref.release();
-
     return s->depth_frame;
 }
 

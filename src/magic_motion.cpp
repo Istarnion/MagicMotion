@@ -570,9 +570,15 @@ MagicMotion_CaptureFrame(void)
                             tag |= TAG_FOREGROUND;
 
                             uint32_t voxel_index = WORLD_TO_VOXEL(point);
+                            if(voxel_index < 0 || voxel_index >= NUM_VOXELS)
+                            {
+                                // NOTE(istarnion): This is a bug. Please fix.
+                                printf("WARNING: Point (%f, %f, %f) was transformed to voxel index %d\n",
+                                       point.x, point.y, point.z, voxel_index);
+                                continue;
+                            }
 
                             Voxel *v = &magic_motion.voxels[voxel_index];
-                            assert(v); // The voxel should never be NULL.
 
                             // Add the current points color into the running average
                             v->color.r = (uint8_t)((color.r + v->point_count * v->color.r) /
@@ -776,7 +782,7 @@ _ComputeBackgroundModelDL(void *userdata)
         pthread_mutex_unlock(&data->mutex_handle);
 
         // Process
-        sleep(1);
+        sleep(1); // Placeholder
 
         pthread_mutex_lock(&data->mutex_handle);
 

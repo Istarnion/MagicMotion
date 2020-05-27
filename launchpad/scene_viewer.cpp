@@ -236,6 +236,14 @@ namespace viewer
                                             (int)ImGuizmo::WORLD);
 
                 ImGui::Checkbox("Frustum", &s->show_frustum);
+                if(ImGui::Button("Go To"))
+                {
+                    cam.position = (V3){ pos[0], pos[1], pos[2] };
+                    V3 forward = MulMat4Vec3(s->frustum.transform, (V3){ 0, 0, 1 });
+                    CameraLookAt(&cam, (V3){ pos[0]+forward.x,
+                                             pos[1]+forward.y,
+                                             pos[2]+forward.z });
+                }
 
                 ImGuizmo::RecomposeMatrixFromComponents(pos, rotation, scale,
                                                         s->frustum.transform.v);

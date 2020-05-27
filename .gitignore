@@ -9,3 +9,4 @@ OpenNI2/
 *.dylib
 macOS/Build/
 macOS/MagicMotion.xcodeproj/
+core

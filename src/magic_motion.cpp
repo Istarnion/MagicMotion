@@ -38,6 +38,7 @@ enum Classifier3D
 {
     CLASSIFIER_3D_NONE,
     CLASSIFIER_3D_CALIBRATION_NAIVE,
+    CLASSIFIER_3D_SIMPLE_MOG,
     CLASSIFIER_3D_DL // Not implemented yet
 };
 
@@ -50,8 +51,8 @@ enum Classifier2D
     CLASSIFIER_2D_OPENCV
 };
 
-static const Classifier3D classifier3D = CLASSIFIER_3D_NONE;
-static const Classifier2D classifier2D = CLASSIFIER_2D_NONE;
+static const Classifier3D classifier3D = CLASSIFIER_3D_SIMPLE_MOG;
+static const Classifier2D classifier2D = CLASSIFIER_2D_OPENCV;
 
 struct ClassifierData3D
 {
@@ -173,6 +174,7 @@ _TrilinearlyInterpolate(V3 point, float *background)
 // compute the background model.
 // The implementation is at the bottom of this file
 static void *_ComputeBackgroundModelNaiveCalibration(void *userdata);
+static void *_ComputeBackgroundModelSimpleMOG(void *userdata);
 static void *_ComputeBackgroundModelDL(void *userdata);
 static void *_ComputeBackgroundModelOpenCV(void *userdata);
 
@@ -340,6 +342,9 @@ MagicMotion_Initialize(void)
     {
         case CLASSIFIER_3D_CALIBRATION_NAIVE:
             thread_3D = &_ComputeBackgroundModelNaiveCalibration;
+            break;
+        case CLASSIFIER_3D_SIMPLE_MOG:
+            thread_3D = &_ComputeBackgroundModelSimpleMOG;
             break;
         case CLASSIFIER_3D_DL:
             thread_3D = &_ComputeBackgroundModelDL;
@@ -561,39 +566,39 @@ MagicMotion_CaptureFrame(void)
                         // Skip trilinear interpolation, and use nearest voxel instead:
                         // float background_probability = magic_motion.background_data.background[voxel_index];
 
-                        const float mix = 0.1f; // 0 is only background model, 1 is only sensor mask
+                        const float mix = 0.2f; // 0 is only background model, 1 is only sensor mask
                         background_probability = LERP(background_probability, (1.0f - mask), mix);
 
                         if(background_probability < BACKGROUND_PROBABILITY_TRESHOLD ||
                            magic_motion.classifier_thread_3D.is_calibrating)
                         {
                             tag |= TAG_FOREGROUND;
-
-                            uint32_t voxel_index = WORLD_TO_VOXEL(point);
-                            if(voxel_index < 0 || voxel_index >= NUM_VOXELS)
-                            {
-                                // NOTE(istarnion): This is a bug. Please fix.
-                                printf("WARNING: Point (%f, %f, %f) was transformed to voxel index %d\n",
-                                       point.x, point.y, point.z, voxel_index);
-                                continue;
-                            }
-
-                            Voxel *v = &magic_motion.voxels[voxel_index];
-
-                            // Add the current points color into the running average
-                            v->color.r = (uint8_t)((color.r + v->point_count * v->color.r) /
-                                                   (v->point_count+1));
-                            v->color.g = (uint8_t)((color.g + v->point_count * v->color.g) /
-                                                   (v->point_count+1));
-                            v->color.b = (uint8_t)((color.b + v->point_count * v->color.b) /
-                                                   (v->point_count+1));
-
-                            ++v->point_count;
                         }
                         else
                         {
                             tag |= TAG_BACKGROUND;
                         }
+
+                        uint32_t voxel_index = WORLD_TO_VOXEL(point);
+                        if(voxel_index < 0 || voxel_index >= NUM_VOXELS)
+                        {
+                            // NOTE(istarnion): This is a bug. Please fix.
+                            printf("WARNING: Point (%f, %f, %f) was transformed to voxel index %d\n",
+                                   point.x, point.y, point.z, voxel_index);
+                            continue;
+                        }
+
+                        Voxel *v = &magic_motion.voxels[voxel_index];
+
+                        // Add the current points color into the running average
+                        v->color.r = (uint8_t)((color.r + v->point_count * v->color.r) /
+                                               (v->point_count+1));
+                        v->color.g = (uint8_t)((color.g + v->point_count * v->color.g) /
+                                               (v->point_count+1));
+                        v->color.b = (uint8_t)((color.b + v->point_count * v->color.b) /
+                                               (v->point_count+1));
+
+                        ++v->point_count;
                     }
 
                     // Add to point clouds
@@ -754,6 +759,66 @@ _ComputeBackgroundModelNaiveCalibration(void *userdata)
             was_calibrating_last_frame = false;
         }
 
+        sched_yield();
+    }
+
+    free(avg_point_counts);
+    free(latest_frame);
+
+    return NULL;
+}
+
+static void *
+_ComputeBackgroundModelSimpleMOG(void *userdata)
+{
+    ClassifierData3D *data = (ClassifierData3D *)userdata;
+
+    // A place to store a copy of the latest voxel frame
+    Voxel *latest_frame = (Voxel *)malloc(NUM_VOXELS * sizeof(Voxel));
+
+    // Buffer to store average point counts per voxel during calibration
+    float *avg_point_counts = (float *)calloc(NUM_VOXELS, sizeof(float));
+    unsigned int calibration_start_frame = 0;
+
+    static const int duration = 30 * 30;
+    static const float treshold = 25.0f;
+
+    size_t last_frame_count = 0;
+
+    while(data->running)
+    {
+        pthread_mutex_lock(&data->mutex_handle);
+
+        size_t frame_count = magic_motion.frame_count;
+        if(frame_count == last_frame_count)
+        {
+            pthread_mutex_unlock(&data->mutex_handle);
+            sched_yield();
+            continue;
+        }
+
+        last_frame_count = frame_count;
+
+        // Get last frame voxel grid.
+        memcpy(latest_frame, magic_motion.voxels, NUM_VOXELS * sizeof(Voxel));
+
+        size_t framenum = MIN(frame_count, duration-1);
+
+        for(size_t i=0; i<NUM_VOXELS; ++i)
+        {
+            float point_count = (float)latest_frame[i].point_count;
+            avg_point_counts[i] = (avg_point_counts[i] * framenum +
+                                   point_count) / (framenum+1);
+
+            float background_prob = (avg_point_counts[i] >= treshold) ? 1 : 0;
+            magic_motion.background_model[i] = background_prob;
+
+            // if(point_count > 0) printf("(%d, %f)", (int)point_count, avg_point_counts[i]);
+        }
+
+        // putc('\n', stdout);
+
+        pthread_mutex_unlock(&data->mutex_handle);
         sched_yield();
     }
 

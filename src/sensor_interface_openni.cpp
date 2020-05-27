@@ -71,7 +71,7 @@ struct OpenNIFrameListener : public openni::VideoStream::NewFrameListener
 
         frame_ref.release();
 
-#if 1 // Debugging
+#if 0 // Debugging
         openni::VideoMode mode = video_stream.getVideoMode();
         int w = mode.getResolutionX();
         int h = mode.getResolutionY();

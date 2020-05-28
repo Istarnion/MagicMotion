@@ -12,6 +12,7 @@
 #include "sensor_interface_openni.cpp"
 #endif
 
+#include "timing.h"
 #include "sensor_serialization.cpp"
 
 #include "magic_motion.h"
@@ -52,7 +53,7 @@ enum Classifier2D
 };
 
 static const Classifier3D classifier3D = CLASSIFIER_3D_SIMPLE_MOG;
-static const Classifier2D classifier2D = CLASSIFIER_2D_OPENCV;
+static const Classifier2D classifier2D = CLASSIFIER_2D_NONE;
 
 struct ClassifierData3D
 {
@@ -635,6 +636,7 @@ MagicMotion_CaptureFrame(void)
 
     pthread_mutex_unlock(&magic_motion.classifier_thread_3D.mutex_handle);
     pthread_mutex_unlock(&magic_motion.classifier_thread_2D.mutex_handle);
+
     MM_TRACE("Finished frame capture");
 }
 

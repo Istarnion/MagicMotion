@@ -3,6 +3,7 @@ imgui.ini
 test.dSYM/
 magicmotion_test.dSYM/
 *.ser
+*.bak
 OpenNI/
 OpenNI2/
 *.so
@@ -10,3 +11,4 @@ OpenNI2/
 macOS/Build/
 macOS/MagicMotion.xcodeproj/
 core
+*.vid

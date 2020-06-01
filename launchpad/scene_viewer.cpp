@@ -57,7 +57,8 @@ namespace viewer
     {
         UIMode mode;
         bool video_window_open;
-        char recording_filename[128];
+        char recording_filename_cloud[128];
+        char recording_filename_video[128];
         bool is_recording;
 
         bool sensor_view_open;
@@ -111,7 +112,8 @@ namespace viewer
         selected_sensor = 0;
         gizmo_mode = ImGuizmo::LOCAL;
 
-        strcpy(UI.recording_filename, "recording.vid");
+        strcpy(UI.recording_filename_cloud, "recording_cloud.vid");
+        strcpy(UI.recording_filename_video, "recording_video.vid");
         UI.render_voxels = false;
         UI.render_point_cloud = true;
         UI.visualize_bgsub = true;
@@ -262,13 +264,14 @@ namespace viewer
         {
             ImGui::Begin("Video Recording", &UI.video_window_open);
 
-            ImGui::InputText("File", UI.recording_filename, 128);
+            ImGui::InputText("Cloud File", UI.recording_filename_cloud, 128);
+            ImGui::InputText("Video File", UI.recording_filename_video, 128);
 
             if(!UI.is_recording)
             {
                 if(ImGui::Button("Start recording"))
                 {
-                    video_recorder = StartVideoRecording(UI.recording_filename);
+                    video_recorder = StartVideoRecording(UI.recording_filename_cloud, UI.recording_filename_video);
                     UI.is_recording = true;
                 }
             }
@@ -442,11 +445,11 @@ namespace viewer
         MagicMotionTag *tags = MagicMotion_GetTags();
         unsigned int point_cloud_size = MagicMotion_GetCloudSize();
 
-        if(UI.render_point_cloud)
+        if(UI.render_point_cloud && point_cloud_size > 0)
         {
             // Stack allocating these is risky!
-            V3 fcolors[point_cloud_size];
-            V3 points[point_cloud_size];
+            V3 *fcolors = (V3 *)calloc(point_cloud_size, sizeof(V3));
+            V3 *points = (V3 *)calloc(point_cloud_size, sizeof(V3));
 
 
             size_t actual_cloud_size = 0;
@@ -506,11 +509,25 @@ namespace viewer
             }
 
             RenderPointCloud(points, fcolors, actual_cloud_size);
+            free(points);
+            free(fcolors);
         }
 
         if(UI.is_recording)
         {
-            WriteVideoFrame(video_recorder, point_cloud_size, positions, colors);
+
+            WriteVideoFrame(video_recorder, point_cloud_size, positions, colors, tags);
+            for(int i=0; i<num_active_sensors; ++i)
+            {
+                int cw, ch, dw, dh;
+                MagicMotion_GetColorImageResolution(i, &cw, &ch);
+                MagicMotion_GetDepthImageResolution(i, &dw, &dh);
+
+                const Color *colors = MagicMotion_GetColorImage(i);
+                const float *depths = MagicMotion_GetDepthImage(i);
+
+                AddVideoFrame(video_recorder, cw, ch, dw, dh, colors, depths);
+            }
         }
 
 

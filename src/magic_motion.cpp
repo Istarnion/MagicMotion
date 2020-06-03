@@ -1,6 +1,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <assert.h>
+#include <unistd.h>
 
 // #include "opencv2/video.hpp"
 #include <opencv2/video/background_segm.hpp>
@@ -8,8 +9,10 @@
 
 #ifdef SENSOR_REALSENSE
 #include "sensor_interface_realsense.cpp"
-#else
+#elif defined(SENSOR_OPENNI)
 #include "sensor_interface_openni.cpp"
+#else
+#include "sensor_interface_recording.cpp"
 #endif
 
 #include "timing.h"
@@ -72,7 +75,7 @@ struct ClassifierData2D
 
 struct SensorFrame
 {
-    Color *color_frame;
+    ColorPixel *color_frame;
     float *depth_frame;
 };
 
@@ -90,7 +93,7 @@ static struct
     unsigned int frame_count;    // The frame count increments at every call to CaptureFrame
 
     V3 *spatial_cloud;           // XYZ components of the point cloud
-    Color *color_cloud;          // RGB components of the point cloud
+    ColorPixel *color_cloud;          // RGB components of the point cloud
     MagicMotionTag *tag_cloud;   // 32 bit tags for each point in the cloud
     unsigned int cloud_size;     // The number of points currently in the cloud
     unsigned int cloud_capacity; // The maximum number of points in the cloud
@@ -286,7 +289,7 @@ MagicMotion_Initialize(void)
             .far_plane = sensor->depth_stream_info.max_depth / 100.0f
         };
 
-        magic_motion.sensor_frames[i].color_frame = (Color *)calloc(sensor->color_stream_info.width * sensor->color_stream_info.height, sizeof(Color));
+        magic_motion.sensor_frames[i].color_frame = (ColorPixel *)calloc(sensor->color_stream_info.width * sensor->color_stream_info.height, sizeof(ColorPixel));
         magic_motion.sensor_masks[i] = (float *)malloc(sensor->depth_stream_info.width *
                                                       sensor->depth_stream_info.height *
                                                       sizeof(float));
@@ -324,8 +327,8 @@ MagicMotion_Initialize(void)
                                                       sizeof(MagicMotionTag));
     assert(magic_motion.tag_cloud);
 
-    magic_motion.color_cloud = (Color *)calloc(magic_motion.cloud_capacity,
-                                               sizeof(Color));
+    magic_motion.color_cloud = (ColorPixel *)calloc(magic_motion.cloud_capacity,
+                                                    sizeof(ColorPixel));
     assert(magic_motion.color_cloud);
 
     magic_motion.background_model = (float *)calloc(NUM_VOXELS,
@@ -417,7 +420,6 @@ MagicMotion_Finalize(void)
     {
         SaveSensor(magic_motion.sensors[i].serial, &magic_motion.sensor_frustums[i]);
         SensorFinalize(&magic_motion.sensors[i]);
-        free(magic_motion.sensor_frames[i].color_frame);
         free(magic_motion.sensor_masks[i]);
     }
     MM_TRACE("Closed all sensors");
@@ -429,6 +431,12 @@ unsigned int
 MagicMotion_GetNumCameras(void)
 {
     return magic_motion.num_active_sensors;
+}
+
+const SensorInfo *
+MagicMotion_GetSensorInfo(void)
+{
+    return magic_motion.sensors;
 }
 
 const char *
@@ -485,21 +493,8 @@ MagicMotion_CaptureFrame(void)
     {
         SensorInfo *sensor = &magic_motion.sensors[i];
         ColorPixel *color_frame = GetSensorColorFrame(sensor);
-        size_t num_color_pixels = sensor->color_stream_info.width *
-                                  sensor->color_stream_info.height;
         MM_TRACE("Got color frame");
-
-        for(size_t j=0; j<num_color_pixels; ++j)
-        {
-            Color c = (Color) { .r = color_frame[j].r,
-                                .g = color_frame[j].g,
-                                .b = color_frame[j].g,
-                                ._padding = 0
-                              };
-
-            magic_motion.sensor_frames[i].color_frame[j] = c;
-        }
-
+        magic_motion.sensor_frames[i].color_frame = GetSensorColorFrame(sensor);
         magic_motion.sensor_frames[i].depth_frame = GetSensorDepthFrame(sensor);
         MM_TRACE("Got depth frame");
     }
@@ -515,7 +510,7 @@ MagicMotion_CaptureFrame(void)
     {
         MM_TRACE("Starting computation on sensor");
         SensorInfo *sensor = &magic_motion.sensors[i];
-        Color      *colors = magic_motion.sensor_frames[i].color_frame;
+        ColorPixel *colors = magic_motion.sensor_frames[i].color_frame;
         DepthPixel *depths = magic_motion.sensor_frames[i].depth_frame;
 
         // NOTE(istarnion): The color and depth streams does often
@@ -553,7 +548,7 @@ MagicMotion_CaptureFrame(void)
                                                  pos_y / 100.0f,
                                                  depth / 100.0f });
 
-                    Color color = colors[(color_w/2-w/2+x)+(color_h/2-h/2+y)*color_w];
+                    ColorPixel color = colors[(color_w/2-w/2+x)+(color_h/2-h/2+y)*color_w];
 
                     int tag = (TAG_CAMERA_0 + i);
 
@@ -656,7 +651,7 @@ MagicMotion_GetDepthImageResolution(unsigned int camera_index, int *width, int *
     *height = sensor->depth_stream_info.height;
 }
 
-const Color *
+const ColorPixel *
 MagicMotion_GetColorImage(unsigned int camera_index)
 {
     return magic_motion.sensor_frames[camera_index].color_frame;
@@ -680,7 +675,7 @@ MagicMotion_GetPositions(void)
     return magic_motion.spatial_cloud;
 }
 
-Color *
+ColorPixel *
 MagicMotion_GetColors(void)
 {
     return magic_motion.color_cloud;
@@ -903,7 +898,7 @@ _ComputeBackgroundModelOpenCV(void *userdata)
             const int dh = sensor->depth_stream_info.height;
 
             float *depth_pixels = magic_motion.sensor_frames[i].depth_frame;
-            Color *color_pixels = magic_motion.sensor_frames[i].color_frame;
+            ColorPixel *color_pixels = magic_motion.sensor_frames[i].color_frame;
             if(!(depth_pixels && color_pixels)) continue;
 
             // We feed the subtractor a mix of the depth image signal and
@@ -916,7 +911,7 @@ _ComputeBackgroundModelOpenCV(void *userdata)
             {
                 int cx = (cw-dw)/2 + j%dw;
                 int cy = (ch-dh)/2 + j/dw;
-                Color c = color_pixels[cx+cy*cw];
+                ColorPixel c = color_pixels[cx+cy*cw];
 
                 // Grayscale
                 float value = (c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f) / 255.0f;

@@ -3,6 +3,7 @@
 
 #include "magic_math.h"
 #include "frustum.h"
+#include "sensor_interface.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -56,25 +57,17 @@ typedef enum
     TAG_BACKGROUND = 32
 } MagicMotionTag;
 
-typedef union
-{
-    uint32_t color;
-    struct
-    {
-        uint8_t _padding, r, g, b;
-    };
-} Color;
-
 typedef struct
 {
     uint32_t point_count; // How many points are in this voxel
-    Color color; // The average color of the points in this voxel
+    ColorPixel color; // The average color of the points in this voxel
 } Voxel;
 
 void MagicMotion_Initialize(void);
 void MagicMotion_Finalize(void);
 
 unsigned int MagicMotion_GetNumCameras(void);
+const SensorInfo *MagicMotion_GetSensorInfo(void);
 const char *MagicMotion_GetCameraName(unsigned int camera_index);
 const char *MagicMotion_GetCameraURI(unsigned int camera_index);
 const char *MagicMotion_GetCameraSerialNumber(unsigned int camera_index);
@@ -88,12 +81,12 @@ void MagicMotion_GetColorImageResolution(unsigned int camera_index, int *width, 
 void MagicMotion_GetDepthImageResolution(unsigned int camera_index, int *width, int *height);
 
 // These functions return the frames from the latest call to MagicMotion_CaptureFrame
-const Color *MagicMotion_GetColorImage(unsigned int camera_index);
+const ColorPixel *MagicMotion_GetColorImage(unsigned int camera_index);
 const float *MagicMotion_GetDepthImage(unsigned int camera_index);
 
 unsigned int MagicMotion_GetCloudSize(void);
 V3 *MagicMotion_GetPositions(void);
-Color *MagicMotion_GetColors(void);
+ColorPixel *MagicMotion_GetColors(void);
 MagicMotionTag *MagicMotion_GetTags(void);
 
 Voxel *MagicMotion_GetVoxels(void); // Return the full voxel grid as an array of length NUM_VOXELS

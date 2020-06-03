@@ -96,14 +96,10 @@ namespace viewer
             const char *serial = MagicMotion_GetCameraSerialNumber(i);
             const char *nick;
 
-            if(strcmp(serial, "18110830920") == 0)
-            {
-                nick = "Fremst";
-            }
-            else
-            {
-                nick = MagicMotion_GetCameraName(i);
-            }
+            // We can add nicks to cameras here by comparing serial numbers.
+            // TODO(istarnion): Add a data driven way to do this, so we
+            // won't need to edit source code and recompile
+            nick = MagicMotion_GetCameraName(i);
 
             snprintf(active_sensors[i].name, 128, "%s (%s)",
                      nick, serial);
@@ -271,7 +267,7 @@ namespace viewer
             {
                 if(ImGui::Button("Start recording"))
                 {
-                    video_recorder = StartVideoRecording(UI.recording_filename_cloud, UI.recording_filename_video);
+                    video_recorder = StartVideoRecording(UI.recording_filename_cloud, UI.recording_filename_video, num_active_sensors, MagicMotion_GetSensorInfo());
                     UI.is_recording = true;
                 }
             }
@@ -312,10 +308,11 @@ namespace viewer
             {
                 MagicMotion_GetColorImageResolution(UI.camera_index, &width, &height);
                 uint32_t pixels[width * height];
-                const Color *colors = MagicMotion_GetColorImage(UI.camera_index);
+                const ColorPixel *colors = MagicMotion_GetColorImage(UI.camera_index);
                 for(int i=0; i<width*height; ++i)
                 {
-                    Color c = *colors++;
+                    ColorPixel c = *colors++;
+
                     uint32_t p = (c.b << 16) |
                                  (c.g << 8)  |
                                  (c.r)       |
@@ -396,11 +393,11 @@ namespace viewer
             if(UI.ocv_color_feed)
             {
                 MagicMotion_GetColorImageResolution(UI.ocv_camera_index, &width, &height);
-                const Color *pixels = MagicMotion_GetColorImage(UI.ocv_camera_index);
+                const ColorPixel *pixels = MagicMotion_GetColorImage(UI.ocv_camera_index);
                 float values[width*height];
                 for(size_t i=0; i<width*height; ++i)
                 {
-                    Color c = pixels[i];
+                    ColorPixel c = pixels[i];
                     float value = (c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f) / 255.0f;
                     values[i] = value;
                 }
@@ -441,7 +438,7 @@ namespace viewer
         RenderCube((V3){ 0, 0, 0 }, (V3){ 1, 1, 1 });
 
         V3 *positions = MagicMotion_GetPositions();
-        Color *colors = MagicMotion_GetColors();
+        ColorPixel *colors = MagicMotion_GetColors();
         MagicMotionTag *tags = MagicMotion_GetTags();
         unsigned int point_cloud_size = MagicMotion_GetCloudSize();
 
@@ -450,7 +447,6 @@ namespace viewer
             // Stack allocating these is risky!
             V3 *fcolors = (V3 *)calloc(point_cloud_size, sizeof(V3));
             V3 *points = (V3 *)calloc(point_cloud_size, sizeof(V3));
-
 
             size_t actual_cloud_size = 0;
             for(size_t i=0; i<point_cloud_size; ++i)
@@ -523,13 +519,12 @@ namespace viewer
                 MagicMotion_GetColorImageResolution(i, &cw, &ch);
                 MagicMotion_GetDepthImageResolution(i, &dw, &dh);
 
-                const Color *colors = MagicMotion_GetColorImage(i);
-                const float *depths = MagicMotion_GetDepthImage(i);
+                const ColorPixel *colorpixels = MagicMotion_GetColorImage(i);
+                const float *depthpixels = MagicMotion_GetDepthImage(i);
 
-                AddVideoFrame(video_recorder, cw, ch, dw, dh, colors, depths);
+                AddVideoFrame(video_recorder, cw, ch, dw, dh, colorpixels, depthpixels);
             }
         }
-
 
         if(UI.render_voxels)
         {
@@ -546,7 +541,7 @@ namespace viewer
                         const int i = VOXEL_INDEX(x, y, z);
                         if(voxels[i].point_count > 8)
                         {
-                            Color c = voxels[i].color;
+                            ColorPixel c = voxels[i].color;
                             voxel_colors[voxel_index] = (V3){
                                 c.r / 255.0f,
                                 c.g / 255.0f,

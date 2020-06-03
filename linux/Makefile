@@ -12,7 +12,7 @@ SENSOR_INTERFACE=SENSOR_RECORDING
 #SENSOR_INTERFACE=SENSOR_OPENNI
 
 CFLAGS=-shared -fPIC -g -std=c++11 -I ../src -I ../miniz -I ${OPENNI2_INCLUDE} $(shell pkg-config opencv4 --cflags) -D${SENSOR_INTERFACE}
-LIBS=-L$(OPENNI2_REDIST) -lOpenNI2 -pthreads $(shell pkg-config opencv4 --libs)
+LIBS=-L$(OPENNI2_REDIST) -lOpenNI2 -lm -pthreads $(shell pkg-config opencv4 --libs)
 
 SRC=$(shell find launchpad -name '*.cpp')
 HEADERS=$(shell find launchpad -name '*.h')

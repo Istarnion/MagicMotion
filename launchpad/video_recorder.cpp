@@ -1,6 +1,10 @@
 #include "magic_motion.h" // MagiMotionTag
 #include "sensor_interface.h" // ColorPixel
+#include <stdlib.h>
 #include <stdio.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <fcntl.h>
 
 #define MINIZ_NO_STDIO
 #define MINIZ_NO_TIME
@@ -14,15 +18,95 @@
 extern "C" {
 #endif
 
+typedef struct
+{
+    void *data;
+    size_t n_bytes;
+    FILE *fd;
+} QueuedBuffer;
+
+#define QUEUE_LENGTH 1024
+#define N_CONSUMERS 6
+
 typedef struct VideoRecorder
 {
     FILE *cloud_file;
     FILE *video_file;
     size_t frame_count;
+
+    volatile bool running;
+
+    QueuedBuffer buffer_queue[QUEUE_LENGTH];
+    size_t producer_index;
+    size_t consumer_index;
+    size_t buffer_count;
+    pthread_mutex_t lock;
+    sem_t *empty;
+    sem_t *full;
+
+    pthread_t consumers[N_CONSUMERS];
 } VideoRecorder;
 
 #define MAX_RECORDERS 8
 static VideoRecorder recorders[MAX_RECORDERS];
+
+
+static void *
+_ConsumerThread(void *userdata)
+{
+    VideoRecorder *recorder = (VideoRecorder *)userdata;
+
+    while(recorder->running)
+    {
+        sem_wait(recorder->full);
+        pthread_mutex_lock(&recorder->lock);
+
+        QueuedBuffer buffer = recorder->buffer_queue[recorder->consumer_index];
+
+        ++recorder->consumer_index;
+        if(recorder->consumer_index >= QUEUE_LENGTH)
+        {
+            recorder->consumer_index = 0;
+        }
+
+        --recorder->buffer_count;
+
+        pthread_mutex_unlock(&recorder->lock);
+        sem_post(recorder->empty);
+
+        fwrite(buffer.data, 1, buffer.n_bytes, buffer.fd);
+        free(buffer.data);
+    }
+
+    return NULL;
+}
+
+void
+_WriteBuffer(VideoRecorder *recorder, const void *data, size_t n_bytes, FILE *fd)
+{
+    QueuedBuffer buffer = {0};
+    {
+        buffer.data = malloc(n_bytes);
+        memcpy(buffer.data, data, n_bytes);
+        buffer.n_bytes = n_bytes;
+        buffer.fd = fd;
+    }
+
+    sem_wait(recorder->empty);
+    pthread_mutex_lock(&recorder->lock);
+
+    recorder->buffer_queue[recorder->producer_index] = buffer;
+    ++recorder->producer_index;
+    if(recorder->producer_index >= QUEUE_LENGTH)
+    {
+        recorder->producer_index = 0;
+    }
+
+    ++recorder->buffer_count;
+
+    pthread_mutex_unlock(&recorder->lock);
+    sem_post(recorder->full);
+}
 
 VideoRecorder *
 StartVideoRecording(const char *cloud_file, const char *video_file, const size_t num_sensors, const SensorInfo *sensors)
@@ -35,7 +119,7 @@ StartVideoRecording(const char *cloud_file, const char *video_file, const size_t
         if(recorder->cloud_file == NULL || recorder->video_file == NULL)
         {
             result = recorder;
-            result->frame_count = 0;
+            memset(result, 0, sizeof(VideoRecorder));
             result->cloud_file = fopen(cloud_file, "wb");
             result->video_file = fopen(video_file, "wb");
             if(result->cloud_file == NULL || ferror(result->cloud_file) ||
@@ -48,6 +132,17 @@ StartVideoRecording(const char *cloud_file, const char *video_file, const size_t
 
             break;
         }
+    }
+
+    result->running = true;
+
+    pthread_mutex_init(&result->lock, NULL);
+    result->full = sem_open("full", O_CREAT, 0600, 0);
+    result->empty = sem_open("empty", O_CREAT, 0600, QUEUE_LENGTH);
+
+    for(int i=0; i<N_CONSUMERS; ++i)
+    {
+        pthread_create(&result->consumers[i], NULL, _ConsumerThread, result);
     }
 
     fprintf(result->video_file, "%zu sensors\n", num_sensors);
@@ -77,11 +172,21 @@ StopRecording(VideoRecorder *recorder)
     printf("Writing %zu as the %zu last bytes\n", recorder->frame_count, sizeof(size_t));
     fwrite(&recorder->frame_count, sizeof(size_t), 1, recorder->cloud_file);
     fwrite(&recorder->frame_count, sizeof(size_t), 1, recorder->video_file);
+
+    recorder->running = false;
+    for(int i=0; i<N_CONSUMERS; ++i)
+    {
+        pthread_join(recorder->consumers[i], NULL);
+    }
+
+    pthread_mutex_destroy(&recorder->lock);
+    sem_close(recorder->full);
+    sem_close(recorder->empty);
+
     fclose(recorder->cloud_file);
     fclose(recorder->video_file);
-    recorder->cloud_file = NULL;
-    recorder->video_file = NULL;
-    recorder->frame_count = 0;
+
+    memset(recorder, 0, sizeof(VideoRecorder));
 }
 
 static void

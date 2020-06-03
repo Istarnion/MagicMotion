@@ -8,7 +8,7 @@ else
 endif
 
 CFLAGS=-g $(shell sdl2-config --cflags) -I src -I imgui -I ImGuizmo -I miniz -std=c++11 $(shell pkg-config opencv4 --cflags)
-LIBS=-lSDL2 -L$(OPENNI2_REDIST) -lOpenNI2 -lMagicMotion -lm $(shell pkg-config opencv4 --libs)
+LIBS=-lSDL2 -L$(OPENNI2_REDIST) -lOpenNI2 -lMagicMotion -lm -lpthread $(shell pkg-config opencv4 --libs)
 
 ifeq (${OS},macOS)
 	LIBS += -lc++ -framework OpenGl -framework CoreFoundation

@@ -121,6 +121,8 @@ namespace viewer
     void
     SceneUpdate(float dt)
     {
+        MagicMotion_CaptureFrame();
+
         UpdateProjectionMatrix();
 
         InputState *input = Input();

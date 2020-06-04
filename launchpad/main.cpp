@@ -10,6 +10,7 @@
 #include "video_recorder.cpp"
 
 #include "scene_viewer.cpp"
+#include "scene_inspector.cpp"
 
 int
 main(int num_args, char *args[])
@@ -22,7 +23,7 @@ main(int num_args, char *args[])
     unsigned int num_cameras = MagicMotion_GetNumCameras();
     printf("%u cameras initialized\n", num_cameras);
 
-    Scene scene = GetViewerScene();
+    Scene scene = GetInspectorScene();
     scene.Init();
 
     RendererInit("MagicMotion", 800, 600);
@@ -136,7 +137,6 @@ main(int num_args, char *args[])
             ImGui::End();
         }
 
-        MagicMotion_CaptureFrame();
         scene.Update(delta_time);
 
         RendererDisplay();

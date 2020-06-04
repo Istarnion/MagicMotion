@@ -13,6 +13,7 @@ void RendererSetViewMatrix(Mat4 v);
 void RendererSetProjectionMatrix(Mat4 p);
 Mat4 *RendererGetViewMatrix(void);
 Mat4 *RendererGetProjectionMatrix(void);
+V3 RendererScreenPointToRay(float x, float y);
 
 void *RendererCreateTexture(const void *pixels, int width, int height);
 void RendererDestroyTexture(void *texture);

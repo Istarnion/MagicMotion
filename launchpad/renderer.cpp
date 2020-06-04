@@ -313,14 +313,13 @@ RendererScreenPointToRay(float x, float y)
 {
     V3 clip = (V3){ 2*(x/width)-1, 1.0f - 2*(y/height), 0.0f };
 
-    Mat4 inverted_view;
-    Mat4 inverted_projection;
+    Mat4 inverted_view = InvertMat4(&view_matrix);
+    Mat4 inverted_projection = InvertMat4(&projection_matrix);
 
-    V3 ray_eye = inverted_projection * clip;
-    ray_eye = -1.0;
+    V3 ray_eye = MulMat4Vec3(inverted_projection, clip);
+    ray_eye.z = -1.0;
 
-    V3 ray_world = inverted_view * ray_eye;
-    Normalize(ray_world);
+    V3 ray_world = NormalizeV3(MulMat4Vec3(inverted_view, ray_eye));
 
     return ray_world;
 }

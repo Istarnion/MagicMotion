@@ -40,14 +40,14 @@ typedef union
     float v[3];
 } V3;
 
-V3
+static V3
 MakeV3(float x, float y, float z)
 {
     V3 result = (V3){ x, y, z };
     return result;
 }
 
-bool
+static bool
 IsEqualV3(V3 a, V3 b)
 {
     return (EQUAL_FLOAT(a.x, b.x) &&
@@ -55,7 +55,7 @@ IsEqualV3(V3 a, V3 b)
             EQUAL_FLOAT(a.z, b.z));
 }
 
-V3
+static V3
 MakeNormalizedV3(float x, float y, float z)
 {
     V3 result = (V3){ x, y, z };
@@ -71,7 +71,7 @@ MakeNormalizedV3(float x, float y, float z)
     return result;
 }
 
-V3
+static V3
 NormalizeV3(V3 v)
 {
     V3 result = v;
@@ -87,40 +87,40 @@ NormalizeV3(V3 v)
     return result;
 }
 
-float
+static float
 MagnitudeV3(V3 v)
 {
     return sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
 }
 
-float
+static float
 MagnitudeSquaredV3(V3 v)
 {
     return v.x*v.x + v.y*v.y + v.z*v.z;
 }
 
-V3
+static V3
 NegateV3(V3 v)
 {
     V3 result = (V3){ -v.x, -v.y, -v.z };
     return result;
 }
 
-V3
+static V3
 AddV3(V3 a, V3 b)
 {
     V3 result = (V3){ a.x + b.x, a.y + b.y, a.z + b.z };
     return result;
 }
 
-V3
+static V3
 SubV3(V3 a, V3 b)
 {
     V3 result = (V3){ a.x - b.x, a.y - b.y, a.z - b.z };
     return result;
 }
 
-V3
+static V3
 SumV3(V3 *v, size_t count)
 {
     V3 result = (V3){ 0, 0, 0 };
@@ -134,14 +134,14 @@ SumV3(V3 *v, size_t count)
     return result;
 }
 
-V3
+static V3
 ScaleV3(V3 v, float scale)
 {
     V3 result = (V3){ v.x * scale, v.y * scale, v.z * scale };
     return result;
 }
 
-V3
+static V3
 CrossV3(V3 a, V3 b)
 {
     V3 result = (V3){
@@ -153,7 +153,7 @@ CrossV3(V3 a, V3 b)
     return result;
 }
 
-float
+static float
 DotV3(V3 a, V3 b)
 {
     float result = a.x * b.x + a.y * b.y + a.z * b.z;
@@ -178,7 +178,7 @@ typedef union
     float v[4*4];
 } Mat4;
 
-bool
+static bool
 IsEqualMat4(Mat4 a, Mat4 b)
 {
     for(size_t i=0; i<4*4; ++i)
@@ -189,7 +189,7 @@ IsEqualMat4(Mat4 a, Mat4 b)
     return true;
 }
 
-Mat4
+static Mat4
 MulMat4(Mat4 a, Mat4 b)
 {
     Mat4 result;
@@ -212,7 +212,7 @@ MulMat4(Mat4 a, Mat4 b)
     return result;
 }
 
-V3
+static V3
 MulMat4Vec3(Mat4 m, V3 v)
 {
     // This function assumes a fouth component to v as v.w = 1.0
@@ -223,7 +223,7 @@ MulMat4Vec3(Mat4 m, V3 v)
     return result;
 }
 
-Mat4
+static Mat4
 IdentityMat4()
 {
     Mat4 result;
@@ -235,7 +235,152 @@ IdentityMat4()
     return result;
 }
 
-Mat4
+static Mat4
+TransposeMat4(const Mat4 *m)
+{
+    Mat4 r;
+    r.f00 = m->f00; r.f01 = m->f10; r.f02 = m->f20; r.f03 = m->f30;
+    r.f10 = m->f01; r.f11 = m->f11; r.f12 = m->f21; r.f13 = m->f31;
+    r.f20 = m->f02; r.f21 = m->f12; r.f22 = m->f22; r.f23 = m->f32;
+    r.f30 = m->f03; r.f31 = m->f13; r.f32 = m->f23; r.f33 = m->f33;
+    return r;
+}
+
+static Mat4
+InvertMat4(const Mat4 *m)
+{
+    Mat4 inv;
+
+    inv.m[0] = m->m[5]  * m->m[10] * m->m[15] -
+               m->m[5]  * m->m[11] * m->m[14] -
+               m->m[9]  * m->m[6]  * m->m[15] +
+               m->m[9]  * m->m[7]  * m->m[14] +
+               m->m[13] * m->m[6]  * m->m[11] -
+               m->m[13] * m->m[7]  * m->m[10];
+
+    inv.m[4] = -m->m[4]  * m->m[10] * m->m[15] +
+                m->m[4]  * m->m[11] * m->m[14] +
+                m->m[8]  * m->m[6]  * m->m[15] -
+                m->m[8]  * m->m[7]  * m->m[14] -
+                m->m[12] * m->m[6]  * m->m[11] +
+                m->m[12] * m->m[7]  * m->m[10];
+
+    inv.m[8] = m->m[4]  * m->m[9] *  m->m[15] -
+               m->m[4]  * m->m[11] * m->m[13] -
+               m->m[8]  * m->m[5] *  m->m[15] +
+               m->m[8]  * m->m[7] *  m->m[13] +
+               m->m[12] * m->m[5] *  m->m[11] -
+               m->m[12] * m->m[7] *  m->m[9];
+
+    inv.m[12] = -m->m[4]  * m->m[9] *  m->m[14] +
+                 m->m[4]  * m->m[10] * m->m[13] +
+                 m->m[8]  * m->m[5] *  m->m[14] -
+                 m->m[8]  * m->m[6] *  m->m[13] -
+                 m->m[12] * m->m[5] *  m->m[10] +
+                 m->m[12] * m->m[6] *  m->m[9];
+
+    inv.m[1] = -m->m[1]  * m->m[10] * m->m[15] +
+                m->m[1]  * m->m[11] * m->m[14] +
+                m->m[9]  * m->m[2] * m->m[15] -
+                m->m[9]  * m->m[3] * m->m[14] -
+                m->m[13] * m->m[2] * m->m[11] +
+                m->m[13] * m->m[3] * m->m[10];
+
+    inv.m[5] = m->m[0]  * m->m[10] * m->m[15] -
+               m->m[0]  * m->m[11] * m->m[14] -
+               m->m[8]  * m->m[2] * m->m[15] +
+               m->m[8]  * m->m[3] * m->m[14] +
+               m->m[12] * m->m[2] * m->m[11] -
+               m->m[12] * m->m[3] * m->m[10];
+
+    inv.m[9] = -m->m[0]  * m->m[9] * m->m[15] +
+                m->m[0]  * m->m[11] * m->m[13] +
+                m->m[8]  * m->m[1] * m->m[15] -
+                m->m[8]  * m->m[3] * m->m[13] -
+                m->m[12] * m->m[1] * m->m[11] +
+                m->m[12] * m->m[3] * m->m[9];
+
+    inv.m[13] = m->m[0]  * m->m[9] * m->m[14] -
+                m->m[0]  * m->m[10] * m->m[13] -
+                m->m[8]  * m->m[1] * m->m[14] +
+                m->m[8]  * m->m[2] * m->m[13] +
+                m->m[12] * m->m[1] * m->m[10] -
+                m->m[12] * m->m[2] * m->m[9];
+
+    inv.m[2] = m->m[1]  * m->m[6] * m->m[15] -
+               m->m[1]  * m->m[7] * m->m[14] -
+               m->m[5]  * m->m[2] * m->m[15] +
+               m->m[5]  * m->m[3] * m->m[14] +
+               m->m[13] * m->m[2] * m->m[7] -
+               m->m[13] * m->m[3] * m->m[6];
+
+    inv.m[6] = -m->m[0]  * m->m[6] * m->m[15] +
+                m->m[0]  * m->m[7] * m->m[14] +
+                m->m[4]  * m->m[2] * m->m[15] -
+                m->m[4]  * m->m[3] * m->m[14] -
+                m->m[12] * m->m[2] * m->m[7] +
+                m->m[12] * m->m[3] * m->m[6];
+
+    inv.m[10] = m->m[0]  * m->m[5] * m->m[15] -
+                m->m[0]  * m->m[7] * m->m[13] -
+                m->m[4]  * m->m[1] * m->m[15] +
+                m->m[4]  * m->m[3] * m->m[13] +
+                m->m[12] * m->m[1] * m->m[7] -
+                m->m[12] * m->m[3] * m->m[5];
+
+    inv.m[14] = -m->m[0]  * m->m[5] * m->m[14] +
+                 m->m[0]  * m->m[6] * m->m[13] +
+                 m->m[4]  * m->m[1] * m->m[14] -
+                 m->m[4]  * m->m[2] * m->m[13] -
+                 m->m[12] * m->m[1] * m->m[6] +
+                 m->m[12] * m->m[2] * m->m[5];
+
+    inv.m[3] = -m->m[1] * m->m[6] * m->m[11] +
+                m->m[1] * m->m[7] * m->m[10] +
+                m->m[5] * m->m[2] * m->m[11] -
+                m->m[5] * m->m[3] * m->m[10] -
+                m->m[9] * m->m[2] * m->m[7] +
+                m->m[9] * m->m[3] * m->m[6];
+
+    inv.m[7] = m->m[0] * m->m[6] * m->m[11] -
+               m->m[0] * m->m[7] * m->m[10] -
+               m->m[4] * m->m[2] * m->m[11] +
+               m->m[4] * m->m[3] * m->m[10] +
+               m->m[8] * m->m[2] * m->m[7] -
+               m->m[8] * m->m[3] * m->m[6];
+
+    inv.m[11] = -m->m[0] * m->m[5] * m->m[11] +
+                 m->m[0] * m->m[7] * m->m[9] +
+                 m->m[4] * m->m[1] * m->m[11] -
+                 m->m[4] * m->m[3] * m->m[9] -
+                 m->m[8] * m->m[1] * m->m[7] +
+                 m->m[8] * m->m[3] * m->m[5];
+
+    inv.m[15] = m->m[0] * m->m[5] * m->m[10] -
+                m->m[0] * m->m[6] * m->m[9] -
+                m->m[4] * m->m[1] * m->m[10] +
+                m->m[4] * m->m[2] * m->m[9] +
+                m->m[8] * m->m[1] * m->m[6] -
+                m->m[8] * m->m[2] * m->m[5];
+
+    double det = m->m[0] * inv.m[0] + m->m[1] * inv.m[4] + m->m[2] * inv.m[8] + m->m[3] * inv.m[12];
+
+    Mat4 result = IdentityMat4();
+
+    if(det != 0)
+    {
+        det = 1.0 / det;
+
+        for(int i = 0; i < 16; ++i)
+        {
+            result.m[i] = inv.m[i] * det;
+        }
+    }
+
+    return result;
+}
+
+static Mat4
 PerspectiveMat4(float aspect, float fovy, float near, float far)
 {
     float const tan_half_fov_y = tan(RADIANS(fovy) / 2.0f);
@@ -257,7 +402,7 @@ PerspectiveMat4(float aspect, float fovy, float near, float far)
     return result;
 }
 
-Mat4
+static Mat4
 OrthographicMat4(float left, float right, float bottom, float top, float near, float far)
 {
     Mat4 result;
@@ -274,7 +419,7 @@ OrthographicMat4(float left, float right, float bottom, float top, float near, f
     return result;
 }
 
-Mat4
+static Mat4
 LookAtMat4(V3 eye, V3 target, V3 up)
 {
     Mat4 result;
@@ -300,7 +445,7 @@ LookAtMat4(V3 eye, V3 target, V3 up)
     return result;
 }
 
-Mat4
+static Mat4
 TranslationMat4(V3 v)
 {
     Mat4 result;
@@ -315,7 +460,7 @@ TranslationMat4(V3 v)
     return result;
 }
 
-Mat4
+static Mat4
 ScaleMat4(V3 v)
 {
     Mat4 result;
@@ -330,7 +475,7 @@ ScaleMat4(V3 v)
     return result;
 }
 
-Mat4
+static Mat4
 RotateMat4(float pitch, float yaw, float roll)
 {
 
@@ -388,7 +533,7 @@ RotateMat4(float pitch, float yaw, float roll)
     return result;
 }
 
-Mat4
+static Mat4
 TransformMat4(V3 pos, V3 scale, V3 euler)
 {
     Mat4 t = TranslationMat4(pos);
@@ -401,7 +546,7 @@ TransformMat4(V3 pos, V3 scale, V3 euler)
     return result;
 }
 
-void
+static void
 DecomposeMat4(const Mat4 &m, V3 *pos, V3 *rot, V3 *scale)
 {
     if(pos)

@@ -41,7 +41,7 @@ InitializeSensorInterface(void)
     puts("Initializing the Recording Interface..");
 
     // TODO(istarnion): Don't hard code this. But don't change the signature of the function neither
-    _interface.video_file = fopen("test_recording_video.vid", "rb");
+    _interface.video_file = fopen("test_video.vid", "rb");
     assert(_interface.video_file);
 
     // Find the number of frames (the last four bytes)
@@ -113,6 +113,7 @@ InitializeSensorInterface(void)
 
             memset(frame_type, 0, 64);
             fgets(frame_type, 64, _interface.video_file);
+            printf("Frame %zu: %s\n", frame_index, frame_type);
             assert(strcmp(frame_type, "depth\n") == 0);
             sensor->depth_frame_offsets[i] = ftell(_interface.video_file);
             fread(&compressed_size, sizeof(size_t), 1, _interface.video_file);

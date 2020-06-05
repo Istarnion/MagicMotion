@@ -492,7 +492,6 @@ MagicMotion_CaptureFrame(void)
     for(size_t i=0; i<magic_motion.num_active_sensors; ++i)
     {
         SensorInfo *sensor = &magic_motion.sensors[i];
-        ColorPixel *color_frame = GetSensorColorFrame(sensor);
         MM_TRACE("Got color frame");
         magic_motion.sensor_frames[i].color_frame = GetSensorColorFrame(sensor);
         magic_motion.sensor_frames[i].depth_frame = GetSensorDepthFrame(sensor);
@@ -775,7 +774,6 @@ _ComputeBackgroundModelSimpleMOG(void *userdata)
 
     // Buffer to store average point counts per voxel during calibration
     float *avg_point_counts = (float *)calloc(NUM_VOXELS, sizeof(float));
-    unsigned int calibration_start_frame = 0;
 
     static const int duration = 30 * 30;
     static const float treshold = 25.0f;
@@ -839,7 +837,6 @@ _ComputeBackgroundModelDL(void *userdata)
         // For the DL classifier we might want to feed it 4D data (+time), in
         // which case we need to get multiple frames
         pthread_mutex_lock(&data->mutex_handle);
-        unsigned int frame_count = magic_motion.frame_count;
         memcpy(latest_frame, magic_motion.voxels, NUM_VOXELS * sizeof(Voxel));
         pthread_mutex_unlock(&data->mutex_handle);
 
@@ -930,7 +927,7 @@ _ComputeBackgroundModelOpenCV(void *userdata)
             pthread_mutex_lock(&data->mutex_handle);
             float *mask = magic_motion.sensor_masks[i];
             masks[i].forEach<uint8_t>(
-                [mask, cw, ch, dw, dh](uint8_t &m, const int position[]) -> void
+                [mask, dw](uint8_t &m, const int position[]) -> void
                 {
                     int x = position[1], y = position[0];
                     mask[x + y * dw] = m / 255.0f;

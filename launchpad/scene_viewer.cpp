@@ -199,7 +199,7 @@ namespace viewer
             SensorRenderData *s = &active_sensors[selected_sensor];
             if(ImGui::Begin("Inspector"))
             {
-                ImGuizmo::OPERATION gizmo_operation;
+                ImGuizmo::OPERATION gizmo_operation = ImGuizmo::TRANSLATE;
 
                 float pos[3];
                 float rotation[3];

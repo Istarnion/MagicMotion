@@ -16,7 +16,7 @@ main()
     normal = v_normal;
     vec3 pos = Positions[gl_InstanceID];
     color = Colors[gl_InstanceID];
-    gl_Position = MVP * vec4(0.5*v_position + pos, 1.0);
+    gl_Position = MVP * vec4(pos + 0.5*v_position, 1.0);
 }
 
 #else

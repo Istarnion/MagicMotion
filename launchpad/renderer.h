@@ -20,6 +20,7 @@ void RendererDestroyTexture(void *texture);
 
 void RenderWireCube(V3 center, V3 size);
 void RenderCube(V3 center, V3 size);
+void RenderColoredCube(V3 center, V3 size, V3 color);
 void RenderCubes(V3 *centers, V3 *colors, size_t num_cubes);
 void RenderPointCloud(V3 *points, V3 *colors, size_t num_points);
 void RenderFrustum(const Frustum *frustum);

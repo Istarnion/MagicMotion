@@ -12,8 +12,18 @@ namespace inspector
     static V3 *spatial_cloud;
     static ColorPixel *color_cloud;
     static MagicMotionTag *tag_cloud;
+    static size_t *boxed_indices;
+    static size_t num_boxed_indices;
 
     static Camera cam;
+
+    enum BoxEffect
+    {
+        BOX_INVISIBLE,
+        BOX_NEUTRAL,
+        BOX_BACKGROUNDINATE,
+        BOX_FOREGROUNDINATE
+    };
 
     static struct
     {
@@ -23,13 +33,17 @@ namespace inspector
         bool render_voxel_bounds;
         bool visualize_bgsub;
         bool remove_bg;
+
+        BoxEffect box_effect;
+        V3 box_position;
+        V3 box_size;
     } UI;
 
     static bool
     _LoadRecording(const char *file)
     {
         recording_file = NULL;
-        FILE *fd = fopen(file, "rb");
+        FILE *fd = fopen(file, "rb+");
         if(!fd || ferror(fd))
         {
             return false;
@@ -86,7 +100,7 @@ namespace inspector
         return true;
     }
 
-    void *
+    static void *
     _LoadAndDecompressBuffer(FILE *fd, void *target_buffer, size_t target_buffer_size)
     {
         size_t compressed_size = 0;
@@ -114,7 +128,7 @@ namespace inspector
         return target_buffer;
     }
 
-    void
+    static void
     _LoadFrame(size_t index)
     {
         assert(recording_file);
@@ -141,12 +155,68 @@ namespace inspector
         spatial_cloud = (V3 *)realloc(spatial_cloud, sizeof(V3)*num_points);
         color_cloud = (ColorPixel *)realloc(color_cloud, sizeof(ColorPixel)*num_points);
         tag_cloud = (MagicMotionTag *)realloc(tag_cloud, sizeof(MagicMotionTag)*num_points);
+        boxed_indices = (size_t *)realloc(boxed_indices, sizeof(size_t)*num_points);
 
         _LoadAndDecompressBuffer(recording_file, spatial_cloud, sizeof(V3)*num_points);
         _LoadAndDecompressBuffer(recording_file, color_cloud, sizeof(ColorPixel)*num_points);
         _LoadAndDecompressBuffer(recording_file, tag_cloud, sizeof(MagicMotionTag)*num_points);
 
         cloud_size = num_points;
+    }
+
+    static void
+    _UpdateFile(size_t from_frame)
+    {
+        // Save the file anew, starting from the tag cloud
+        // of from_frame.
+
+        fseek(recording_file, 0, SEEK_END);
+        size_t end_pos = ftell(recording_file);
+
+        // If from_frame is not the last frame, read everything that
+        // follows into a temp buffer so we can write it back later
+        size_t tail_size = 0;
+        void *tail = NULL;
+        if(from_frame < (frame_count-1))
+        {
+            fseek(recording_file, frame_offsets[from_frame+1], SEEK_SET);
+            size_t next_frame_start = ftell(recording_file);
+
+            tail_size = end_pos - next_frame_start;
+            printf("Tail size: %zu\n", tail_size);
+            tail = malloc(tail_size);
+            fread(tail, 1, tail_size, recording_file);
+        }
+
+        // Find where the tag_cloud of from_frame is stored
+        // First, skip the frame header
+        fseek(recording_file, frame_offsets[from_frame], SEEK_SET);
+        for(uint8_t c=0; c != '\n'; fread(&c, 1, 1, recording_file)) {}
+
+        // Then, skip spatial and color
+        for(int i=0; i<2; ++i)
+        {
+            size_t compressed_size = 0;
+            fread(&compressed_size, sizeof(size_t), 1, recording_file);
+            fseek(recording_file, compressed_size, SEEK_CUR);
+        }
+
+        size_t compressed_size = 0;
+        void *compressed_tags = tdefl_compress_mem_to_heap(tag_cloud,
+                sizeof(MagicMotionTag)*cloud_size, &compressed_size, 0);
+
+        fwrite(&compressed_size, sizeof(size_t), 1, recording_file);
+        fwrite(compressed_tags, 1, compressed_size, recording_file);
+        uint8_t newline = '\n';
+        fwrite(&newline, 1, 1, recording_file);
+
+        mz_free(compressed_tags);
+
+        if(tail)
+        {
+            fwrite(tail, 1, tail_size, recording_file);
+            free(tail);
+        }
     }
 
     bool
@@ -167,6 +237,8 @@ namespace inspector
         UI.render_voxel_bounds = true;
         UI.visualize_bgsub = false;
         UI.remove_bg = false;
+
+        UI.box_size = (V3){ 1, 1, 1 };
 
         return true;
     }
@@ -191,6 +263,7 @@ namespace inspector
                     frame_index = frame_count;
                 }
 
+                _UpdateFile(frame_index);
                 --frame_index;
                 _LoadFrame(frame_index);
             }
@@ -199,6 +272,8 @@ namespace inspector
 
             if(ImGui::Button(">"))
             {
+                _UpdateFile(frame_index);
+
                 ++frame_index;
 
                 if(frame_index >= frame_count)
@@ -213,10 +288,15 @@ namespace inspector
             ImGui::PushItemWidth(250);
             if(ImGui::SliderFloat("##scrub", &f, 0, 1.0f))
             {
-                frame_index = (size_t)(f * frame_count);
-                if(frame_index >= frame_count) frame_index = frame_count-1;
 
-                _LoadFrame(frame_index);
+                size_t old_frame_index = frame_index;
+                frame_index = (size_t)(f * frame_count);
+                if(frame_index != old_frame_index)
+                {
+                    _UpdateFile(old_frame_index);
+                    if(frame_index >= frame_count) frame_index = frame_count-1;
+                    _LoadFrame(frame_index);
+                }
             }
         }
         else
@@ -270,6 +350,77 @@ namespace inspector
         ImGui::Text("%s", UI.tooltip);
 
         ImGui::EndMainMenuBar();
+
+        if(ImGui::Begin("Boxinator"))
+        {
+            if(UI.box_effect != BOX_INVISIBLE)
+            {
+                Mat4 *view = RendererGetViewMatrix();
+                Mat4 *proj = RendererGetProjectionMatrix();
+                ImGuiIO &io = ImGui::GetIO();
+                ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+
+                Mat4 box_transform = TranslationMat4(UI.box_position);
+                ImGuizmo::Manipulate(view->v, proj->v,
+                                     ImGuizmo::TRANSLATE, ImGuizmo::WORLD,
+                                     box_transform.v);
+                DecomposeMat4(box_transform, &UI.box_position, NULL, NULL);
+
+
+                float size_delta = input->mouse_scroll * 1.0f;
+                float box_size = UI.box_size.x + size_delta;
+                if(box_size < 0.1f) box_size = 0.1f;
+                else if(box_size > 100) box_size = 100;
+                UI.box_size = (V3){ box_size, box_size, box_size };
+            }
+
+            V3 min = SubV3(UI.box_position, ScaleV3(UI.box_size, 0.5));
+            V3 max = AddV3(UI.box_position, ScaleV3(UI.box_size, 0.5));
+
+            num_boxed_indices = 0;
+            for(size_t i=0; i<cloud_size; ++i)
+            {
+                V3 p = spatial_cloud[i];
+                if(!(p.x < min.x || p.x > max.x ||
+                     p.y < min.y || p.y > max.y ||
+                     p.z < min.z || p.z > max.z))
+                {
+                    boxed_indices[num_boxed_indices++] = i;
+                }
+            }
+
+            ImGui::Text("Contained points: %zu", num_boxed_indices);
+            ImGui::RadioButton("Neutral", (int *)&UI.box_effect, (int)BOX_NEUTRAL);
+            ImGui::RadioButton("Foregroundinate", (int *)&UI.box_effect, (int)BOX_FOREGROUNDINATE);
+            ImGui::RadioButton("Backgroundinate", (int *)&UI.box_effect, (int)BOX_BACKGROUNDINATE);
+        }
+        else
+        {
+            UI.box_effect = BOX_INVISIBLE;
+        }
+
+        ImGui::End();
+
+        if(UI.box_effect != BOX_INVISIBLE)
+        {
+            if(UI.box_effect == BOX_NEUTRAL)
+            {
+                RenderWireCube(UI.box_position, UI.box_size);
+            }
+            else
+            {
+                for(size_t i=0; i<num_boxed_indices; ++i)
+                {
+                    tag_cloud[boxed_indices[i]] =
+                        (UI.box_effect == BOX_BACKGROUNDINATE) ? TAG_BACKGROUND :
+                                                                 TAG_FOREGROUND;
+                }
+
+                V3 box_color = (UI.box_effect == BOX_BACKGROUNDINATE) ? (V3){ 1, 0, 0 }:
+                                                                        (V3){ 0, 1, 0 };
+                RenderColoredCube(UI.box_position, ScaleV3(UI.box_size, 2), box_color);
+            }
+        }
 
         if(UI.render_voxel_bounds)
         {
@@ -330,6 +481,12 @@ namespace inspector
     void
     SceneEnd(void)
     {
+        _UpdateFile(frame_index);
+
+        free(spatial_cloud);
+        free(color_cloud);
+        free(tag_cloud);
+        free(boxed_indices);
     }
 }
 

@@ -311,7 +311,7 @@ RendererGetProjectionMatrix(void)
 V3
 RendererScreenPointToRay(float x, float y)
 {
-    V3 clip = (V3){ 2*(x/width)-1, 1.0f - 2*(y/height), 0.0f };
+    V3 clip = (V3){ x, y, 0.0f };
 
     Mat4 inverted_view = InvertMat4(&view_matrix);
     Mat4 inverted_projection = InvertMat4(&projection_matrix);
@@ -393,6 +393,24 @@ RenderCubes(V3 *centers, V3 *colors, size_t num_cubes)
         glUniform3fv(cube_instanced_data.colors_loc, num_cubes_to_draw, (GLfloat *)(colors+i));
         glDrawElementsInstanced(GL_TRIANGLES, 6*6, GL_UNSIGNED_SHORT, NULL, num_cubes_to_draw);
     }
+
+    check_gl_errors();
+}
+
+void
+RenderColoredCube(V3 center, V3 size, V3 color)
+{
+    glBindVertexArray(cube_data.vertex_array);
+    glUseProgram(cube_instanced_data.shader);
+
+    Mat4 model_matrix = TransformMat4(center, size, MakeV3(0, 0, 0));
+    Mat4 mvp = MulMat4(model_matrix, projection_view_matrix);
+    glUniformMatrix4fv(cube_instanced_data.mvp_loc, 1, GL_FALSE, (float *)&mvp);
+
+    V3 zero = (V3){ 0, 0, 0 };
+    glUniform3fv(cube_instanced_data.positions_loc, 1, (GLfloat *)&zero);
+    glUniform3fv(cube_instanced_data.colors_loc, 1, (GLfloat *)&color);
+    glDrawElementsInstanced(GL_TRIANGLES, 6*6, GL_UNSIGNED_SHORT, NULL, 1);
 
     check_gl_errors();
 }

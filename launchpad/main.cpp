@@ -79,10 +79,11 @@ main(int num_args, char *args[])
                     {
                         int width, height;
                         RendererGetSize(&width, &height);
-                        float w = 2.0f / width;
-                        float h = -2.0f / height;
 
-                        InputMouseMotion(e.motion.x * w - 1.0f,    e.motion.y * h - 1.0f,
+                        float w = 2.0f / width;
+                        float h = 2.0f / height;
+
+                        InputMouseMotion(e.motion.x * w - 1.0f, -(e.motion.y * h - 1.0f),
                                          e.motion.xrel / (float)width,
                                          e.motion.yrel / (float)height);
                     }

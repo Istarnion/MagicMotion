@@ -1,4 +1,5 @@
 #include "scene_inspector.h"
+#include <unistd.h>
 
 namespace inspector
 {
@@ -8,9 +9,12 @@ namespace inspector
     static size_t frame_index;
     static size_t frame_count;
 
+    static bool dirty_frame_flag;
+
     static size_t cloud_size;
     static V3 *spatial_cloud;
     static ColorPixel *color_cloud;
+    static MagicMotionTag *old_tag_cloud;
     static MagicMotionTag *tag_cloud;
     static size_t *boxed_indices;
     static size_t num_boxed_indices;
@@ -38,6 +42,58 @@ namespace inspector
         V3 box_position;
         V3 box_size;
     } UI;
+
+    static void
+    _SetClassTag(MagicMotionTag *tag, MagicMotionTag new_tag)
+    {
+        dirty_frame_flag = true;
+        int old_tag = (int)*tag;
+        if(new_tag == TAG_FOREGROUND)
+        {
+            old_tag &= ~TAG_BACKGROUND;
+            old_tag |=  TAG_FOREGROUND;
+        }
+        else if(new_tag == TAG_BACKGROUND)
+        {
+            old_tag &= ~TAG_FOREGROUND;
+            old_tag |=  TAG_BACKGROUND;
+        }
+
+        *tag = (MagicMotionTag)old_tag;
+    }
+
+    static void
+    _CalcMetrics(size_t frame)
+    {
+        // Here we accept the new tag cloud
+        // as ground truth, as it has been manually fixed.
+        // TAG_BACKGROUND is positive, TAG_FOREGROUND is
+        // negative.
+        size_t true_positive = 0;
+        size_t false_positive = 0;
+        size_t true_negative = 0;
+        size_t false_negative = 0;
+
+        for(size_t i=0; i<cloud_size; ++i)
+        {
+            MagicMotionTag original_tag = old_tag_cloud[i];
+            MagicMotionTag new_tag = tag_cloud[i];
+
+            if(original_tag & TAG_BACKGROUND) // Positive
+            {
+                if(new_tag & TAG_BACKGROUND) ++true_positive;
+                else if(new_tag & TAG_FOREGROUND) ++false_positive;
+            }
+            else if(original_tag & TAG_FOREGROUND) // Negative
+            {
+                if(new_tag & TAG_FOREGROUND) ++true_negative;
+                else if(new_tag & TAG_BACKGROUND) ++false_negative;
+            }
+        }
+
+        printf("Frame %zu: %6zu %6zu %6zu %6zu\n", frame,
+                true_positive, false_positive, true_negative, false_negative);
+    }
 
     static bool
     _LoadRecording(const char *file)
@@ -155,38 +211,51 @@ namespace inspector
         spatial_cloud = (V3 *)realloc(spatial_cloud, sizeof(V3)*num_points);
         color_cloud = (ColorPixel *)realloc(color_cloud, sizeof(ColorPixel)*num_points);
         tag_cloud = (MagicMotionTag *)realloc(tag_cloud, sizeof(MagicMotionTag)*num_points);
+        old_tag_cloud = (MagicMotionTag *)realloc(old_tag_cloud, sizeof(MagicMotionTag)*num_points);
         boxed_indices = (size_t *)realloc(boxed_indices, sizeof(size_t)*num_points);
 
         _LoadAndDecompressBuffer(recording_file, spatial_cloud, sizeof(V3)*num_points);
         _LoadAndDecompressBuffer(recording_file, color_cloud, sizeof(ColorPixel)*num_points);
         _LoadAndDecompressBuffer(recording_file, tag_cloud, sizeof(MagicMotionTag)*num_points);
 
+        memcpy(old_tag_cloud, tag_cloud, sizeof(MagicMotionTag)*num_points);
+
         cloud_size = num_points;
+        dirty_frame_flag = false;
     }
 
     static void
     _UpdateFile(size_t from_frame)
     {
+        if(!dirty_frame_flag) return;
+
+        // First, calc and print stats for empirical data
+        _CalcMetrics(from_frame);
+
         // Save the file anew, starting from the tag cloud
         // of from_frame.
 
         fseek(recording_file, 0, SEEK_END);
         size_t end_pos = ftell(recording_file);
 
-        // If from_frame is not the last frame, read everything that
-        // follows into a temp buffer so we can write it back later
-        size_t tail_size = 0;
-        void *tail = NULL;
-        if(from_frame < (frame_count-1))
+        // Read in everything that follows from_file into
+        // a buffer so we can write it back later. We have
+        // to do this, as the new compressed tag cloud will
+        // most likely have a different size than the old one
+        if(from_frame >= (frame_count-1))
+        {
+            fseek(recording_file, -sizeof(size_t), SEEK_END);
+        }
+        else
         {
             fseek(recording_file, frame_offsets[from_frame+1], SEEK_SET);
-            size_t next_frame_start = ftell(recording_file);
-
-            tail_size = end_pos - next_frame_start;
-            printf("Tail size: %zu\n", tail_size);
-            tail = malloc(tail_size);
-            fread(tail, 1, tail_size, recording_file);
         }
+
+        size_t tail_start = ftell(recording_file);
+
+        size_t tail_size = end_pos - tail_start;
+        void *tail = malloc(tail_size);
+        fread(tail, 1, tail_size, recording_file);
 
         // Find where the tag_cloud of from_frame is stored
         // First, skip the frame header
@@ -201,6 +270,10 @@ namespace inspector
             fseek(recording_file, compressed_size, SEEK_CUR);
         }
 
+        size_t old_size = 0;
+        fread(&old_size, sizeof(size_t), 1, recording_file);
+        fseek(recording_file, -sizeof(size_t), SEEK_CUR);
+
         size_t compressed_size = 0;
         void *compressed_tags = tdefl_compress_mem_to_heap(tag_cloud,
                 sizeof(MagicMotionTag)*cloud_size, &compressed_size, 0);
@@ -212,11 +285,21 @@ namespace inspector
 
         mz_free(compressed_tags);
 
-        if(tail)
+        fwrite(tail, 1, tail_size, recording_file);
+        free(tail);
+
+        int64_t size_delta = (int64_t)compressed_size - (int64_t)old_size;
+        for(size_t i=from_frame+1; i<frame_count; ++i)
         {
-            fwrite(tail, 1, tail_size, recording_file);
-            free(tail);
+            frame_offsets[i] += size_delta;
         }
+
+        if(size_delta < 0)
+        {
+            ftruncate(fileno(recording_file), end_pos + size_delta);
+        }
+
+        dirty_frame_flag = false;
     }
 
     bool
@@ -230,6 +313,8 @@ namespace inspector
         spatial_cloud = NULL;
         color_cloud = NULL;
         tag_cloud = NULL;
+
+        dirty_frame_flag = false;
 
         // Defaults
         UI.render_point_cloud = true;
@@ -258,17 +343,18 @@ namespace inspector
         {
             if(ImGui::Button("<"))
             {
+                _UpdateFile(frame_index);
+
                 if(frame_index == 0)
                 {
                     frame_index = frame_count;
                 }
 
-                _UpdateFile(frame_index);
                 --frame_index;
                 _LoadFrame(frame_index);
             }
 
-            ImGui::Text("%04zu/%04zu", frame_index, frame_count);
+            ImGui::Text("%04zu/%04zu", (frame_index+1), frame_count);
 
             if(ImGui::Button(">"))
             {
@@ -409,11 +495,12 @@ namespace inspector
             }
             else
             {
+                // Set the tags for all points within the boxinator
                 for(size_t i=0; i<num_boxed_indices; ++i)
                 {
-                    tag_cloud[boxed_indices[i]] =
-                        (UI.box_effect == BOX_BACKGROUNDINATE) ? TAG_BACKGROUND :
-                                                                 TAG_FOREGROUND;
+                    MagicMotionTag new_tag = (UI.box_effect == BOX_BACKGROUNDINATE) ? TAG_BACKGROUND :
+                                                                                      TAG_FOREGROUND;
+                    _SetClassTag(&tag_cloud[boxed_indices[i]], new_tag);
                 }
 
                 V3 box_color = (UI.box_effect == BOX_BACKGROUNDINATE) ? (V3){ 1, 0, 0 }:
@@ -481,7 +568,10 @@ namespace inspector
     void
     SceneEnd(void)
     {
-        _UpdateFile(frame_index);
+        if(cloud_size > 0)
+        {
+            _UpdateFile(frame_index);
+        }
 
         free(spatial_cloud);
         free(color_cloud);

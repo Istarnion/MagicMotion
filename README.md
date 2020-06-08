@@ -14,6 +14,8 @@ I will upload a labeled data set for training and testing.
 Much thanks to @ocornut for writing Dear ImGui, and @nothings for all the stb libraries.
 
 ## How to build
+The only dependency is `SDL2`. You should be able to find it most linux package managers. On Ubuntu, you can install it by `apt install libsdl2-dev`.
+
 Run `make` to build both `MagicMotion` and `magicmotion_test` (the launcpad project).
 To make use of OpenNI cameras, set `HAS_OPENNI=true` in both `Makefile` and `linux/Makefile`, and set the correct sensor interface in `linux/Makefile`.
 The classifier performance can be improved by using OpenCV to do background subtraction on each camera frame before they are transformed into point clouds. To enable this, set `HAS_OPENCV=true` in `linux/Makefile`, and make sure it is set for `classifier_2D` in `src/magicmotion.cpp`.

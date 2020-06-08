@@ -1,5 +1,15 @@
 CC=clang
 
+HAS_OPENNI=false
+HAS_OPENCV=false
+
+SENSOR_INTERFACE=SENSOR_RECORDING
+#SENSOR_INTERFACE=SENSOR_OPENNI
+
+CFLAGS=-shared -fPIC -O2 -std=c++11 -pthreads -I ../src -I ../miniz -D${SENSOR_INTERFACE}
+LIBS=-lm
+
+ifeq (${HAS_OPENNI},true)
 ifndef OPENNI2_REDIST
 	error OPENNI2_REDIST is not set
 endif
@@ -8,11 +18,14 @@ ifndef OPENNI2_INCLUDE
 	error OPENNI2_INCLUDE is not set
 endif
 
-#SENSOR_INTERFACE=SENSOR_RECORDING
-SENSOR_INTERFACE=SENSOR_OPENNI
+CFLAGS += -I ${OPENNI2_INCLUDE}
+LIBS += -L$(OPENNI2_REDIST) -lOpenNI2
+endif
 
-CFLAGS=-shared -fPIC -O2 -std=c++11 -I ../src -I ../miniz -I ${OPENNI2_INCLUDE} $(shell pkg-config opencv4 --cflags) -D${SENSOR_INTERFACE}
-LIBS=-L$(OPENNI2_REDIST) -lOpenNI2 -lm -pthreads $(shell pkg-config opencv4 --libs)
+ifeq (${HAS_OPENCV},true)
+	CFLAGS += -DHAS_OPENCV $(shell pkg-config opencv4 --cflags)
+	LIBS += $(shell pkg-config opencv4 --libs)
+endif
 
 SRC=$(shell find launchpad -name '*.cpp')
 HEADERS=$(shell find launchpad -name '*.h')

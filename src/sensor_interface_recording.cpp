@@ -41,8 +41,14 @@ InitializeSensorInterface(void)
     puts("Initializing the Recording Interface..");
 
     // TODO(istarnion): Don't hard code this. But don't change the signature of the function neither
-    _interface.video_file = fopen("test_video.vid", "rb");
-    assert(_interface.video_file);
+    _interface.video_file = fopen("recording_video.vid", "rb");
+
+    if(!_interface.video_file || ferror(_interface.video_file))
+    {
+        puts("WARN: No file \"recording_video.vid\" found.");
+        _interface.num_sensors = 0;
+        return;
+    }
 
     // Find the number of frames (the last four bytes)
     _interface.num_frames = 0;

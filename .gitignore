@@ -12,3 +12,4 @@ macOS/Build/
 macOS/MagicMotion.xcodeproj/
 core
 *.vid
+dataset.zip

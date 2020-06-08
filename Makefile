@@ -7,8 +7,32 @@ else
 	OS=Linux
 endif
 
-CFLAGS=-O2 $(shell sdl2-config --cflags) -I src -I imgui -I ImGuizmo -I miniz -std=c++11 $(shell pkg-config opencv4 --cflags)
-LIBS=-lSDL2 -L$(OPENNI2_REDIST) -lOpenNI2 -lMagicMotion -lm -lpthread $(shell pkg-config opencv4 --libs)
+HAS_OPENCV=false
+HAS_OPENNI=false
+
+#SCENE=SCENE_VIEWER # For viewing real time data from cameras, or recordings
+SCENE=SCENE_INSPECTOR # For stepping through cloud recordings, and manually correcting them
+
+CFLAGS=-O2 $(shell sdl2-config --cflags) -pthreads -I src -I imgui -I ImGuizmo -I miniz -std=c++11 -D${SCENE}
+LIBS=-lSDL2 -lMagicMotion -lm
+
+ifeq (${HAS_OPENNI},true)
+ifndef OPENNI2_REDIST
+	error OPENNI2_REDIST is not set
+endif
+
+ifndef OPENNI2_INCLUDE
+	error OPENNI2_INCLUDE is not set
+endif
+
+CFLAGS += -I ${OPENNI2_INCLUDE}
+LIBS += -L$(OPENNI2_REDIST) -lOpenNI2
+endif
+
+ifeq (${HAS_OPENCV},true)
+	CFLAGS += -DHAS_OPENCV $(shell pkg-config opencv4 --cflags)
+	LIBS += $(shell pkg-config opencv4 --libs)
+endif
 
 ifeq (${OS},macOS)
 	LIBS += -lc++ -framework OpenGl -framework CoreFoundation

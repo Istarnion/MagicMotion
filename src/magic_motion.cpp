@@ -2,10 +2,13 @@
 #include <pthread.h>
 #include <assert.h>
 #include <unistd.h>
+#include <algorithm>
 
+#ifdef HAS_OPENCV
 // #include "opencv2/video.hpp"
 #include <opencv2/video/background_segm.hpp>
 #include <opencv2/bgsegm.hpp>
+#endif
 
 #ifdef SENSOR_REALSENSE
 #include "sensor_interface_realsense.cpp"
@@ -865,6 +868,7 @@ _ComputeBackgroundModelDL(void *userdata)
 static void *
 _ComputeBackgroundModelOpenCV(void *userdata)
 {
+#ifdef HAS_OPENCV
     ClassifierData2D *data = (ClassifierData2D *)userdata;
 
     cv::Mat frames[MAX_SENSORS];
@@ -944,6 +948,7 @@ _ComputeBackgroundModelOpenCV(void *userdata)
         free(input_imgs[i]);
     }
 
+#endif
     return NULL;
 }
 

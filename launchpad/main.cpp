@@ -23,7 +23,12 @@ main(int num_args, char *args[])
     unsigned int num_cameras = MagicMotion_GetNumCameras();
     printf("%u cameras initialized\n", num_cameras);
 
+#ifdef SCENE_VIEWER
+    Scene scene = GetViewerScene();
+#elif defined(SCENE_INSPECTOR)
     Scene scene = GetInspectorScene();
+#endif
+
     scene.Init();
 
     RendererInit("MagicMotion", 800, 600);

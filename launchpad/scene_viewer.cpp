@@ -1,7 +1,9 @@
 #include "scene_viewer.h"
 
+#ifdef HAS_OPENCV
 #include <opencv2/bgsegm.hpp>
 #include <opencv2/video/background_segm.hpp>
+#endif
 
 #include <SDL.h>
 #include "magic_motion.h"
@@ -65,11 +67,13 @@ namespace viewer
         int camera_index;
         int color_feed;
 
+#ifdef HAS_OPENCV
         bool opencv_view_open;
         int ocv_camera_index;
         int ocv_color_feed;
         int bgsub_algo;
         cv::Ptr<cv::BackgroundSubtractor> ocv_subtractor;
+#endif
 
         bool render_point_cloud;
         bool render_voxels;
@@ -150,7 +154,9 @@ namespace viewer
 
             ImGui::MenuItem("Video Recording", NULL, &UI.video_window_open);
             ImGui::MenuItem("Sensor View", NULL, &UI.sensor_view_open);
+#ifdef HAS_OPENCV
             ImGui::MenuItem("OpenCV comparison", NULL, &UI.opencv_view_open);
+#endif
 
             ImGui::EndMenu();
         }
@@ -348,6 +354,7 @@ namespace viewer
             ImGui::End();
         }
 
+#ifdef HAS_OPENCV
         if(UI.opencv_view_open)
         {
             ImGui::Begin("OpenCV Comparison", &UI.opencv_view_open);
@@ -436,6 +443,7 @@ namespace viewer
 
             ImGui::End();
         }
+#endif
 
         RenderCube((V3){ 0, 0, 0 }, (V3){ 1, 1, 1 });
 

@@ -2,6 +2,7 @@ magicmotion_test
 imgui.ini
 test.dSYM/
 magicmotion_test.dSYM/
+magicmotion_server
 *.ser
 *.bak
 OpenNI/

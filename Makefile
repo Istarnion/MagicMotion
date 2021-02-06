@@ -10,8 +10,8 @@ endif
 HAS_OPENCV=false
 HAS_OPENNI=false
 
-#SCENE=SCENE_VIEWER # For viewing real time data from cameras, or recordings
-SCENE=SCENE_INSPECTOR # For stepping through cloud recordings, and manually correcting them
+SCENE=SCENE_VIEWER # For viewing real time data from cameras, or recordings
+#SCENE=SCENE_INSPECTOR # For stepping through cloud recordings, and manually correcting them
 
 CFLAGS=-O2 $(shell sdl2-config --cflags) -pthreads -I src -I imgui -I ImGuizmo -I miniz -std=c++11 -D${SCENE}
 LIBS=-lSDL2 -lMagicMotion -lm
@@ -47,12 +47,19 @@ endif
 SRC=$(shell find launchpad -name '*.cpp')
 HEADERS=$(shell find launchpad -name '*.h')
 
-EXE=magicmotion_test
 
-${EXE}: ${SRC} ${HEADERS} ${MAGICMOTION}
+magicmotion_test: ${SRC} ${HEADERS} ${MAGICMOTION}
 	cp -R ${OPENNI2_REDIST}/OpenNI2 ./
 	cp ${OPENNI2_REDIST}/libOpenNI2.* ./
 	${CC} ${CFLAGS} launchpad/main.cpp -o $@ ${LIBS}
+
+
+magicmotion_server: server/server.cpp ${MAGICMOTION}
+	cp -R ${OPENNI2_REDIST}/OpenNI2 ./
+	cp ${OPENNI2_REDIST}/libOpenNI2.* ./
+	${CC} ${CFLAGS} server/server.cpp -o $@ ${LIBS}
+
+
 
 ${MAGICMOTION}: $(shell find src -type f) ${MAGICMOTION_PATH}/${MAGICMOTION}
 ifeq (${OS},macOS)
@@ -64,7 +71,8 @@ endif
 
 .PHONY: clean
 clean:
-	rm -f ${EXE}
+	rm -f magicmotion_test
+	rm -f magicmotion_server
 	rm -f ${MAGICMOTION}
 	rm -rf *.dSYM
 	rm -rf OpenNI2

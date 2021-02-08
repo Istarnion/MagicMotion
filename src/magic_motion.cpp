@@ -58,7 +58,7 @@ enum Classifier2D
     CLASSIFIER_2D_OPENCV
 };
 
-static const Classifier3D classifier3D = CLASSIFIER_3D_SIMPLE_MOG;
+static const Classifier3D classifier3D = CLASSIFIER_3D_NONE;
 static const Classifier2D classifier2D = CLASSIFIER_2D_NONE;
 
 struct ClassifierData3D
@@ -533,12 +533,14 @@ MagicMotion_CaptureFrame(void)
         const Frustum f = magic_motion.sensor_frustums[i];
         const Mat4 camera_transform = f.transform;
 
+        Timinginfo timing = StartTiming();
+
         for(uint32_t y=0; y<h; ++y)
         {
             for(uint32_t x=0; x<w; ++x)
             {
                 float depth = depths[x+y*w];
-                float mask = magic_motion.sensor_masks[i][x+y*w];
+                // float mask = magic_motion.sensor_masks[i][x+y*w];
                 if(depth > 0.0f)
                 {
                     float pos_x = tanf((((float)x/(float)w)-0.5f)*fov) * depth;
@@ -554,51 +556,6 @@ MagicMotion_CaptureFrame(void)
 
                     int tag = (TAG_CAMERA_0 + i);
 
-                    // Check if the point is within the voxel grid
-                    if(fabs(point.x) < BOUNDING_BOX_X/2.0f &&
-                       fabs(point.y) < BOUNDING_BOX_Y/2.0f &&
-                       fabs(point.z) < BOUNDING_BOX_Z/2.0f)
-                    {
-                        // Determine if the point is background or foreground
-                        float background_probability = _TrilinearlyInterpolate(point, magic_motion.background_model);
-                        // Skip trilinear interpolation, and use nearest voxel instead:
-                        // float background_probability = magic_motion.background_data.background[voxel_index];
-
-                        const float mix = 0.2f; // 0 is only background model, 1 is only sensor mask
-                        background_probability = LERP(background_probability, (1.0f - mask), mix);
-
-                        if(background_probability < BACKGROUND_PROBABILITY_TRESHOLD ||
-                           magic_motion.classifier_thread_3D.is_calibrating)
-                        {
-                            tag |= TAG_FOREGROUND;
-                        }
-                        else
-                        {
-                            tag |= TAG_BACKGROUND;
-                        }
-
-                        uint32_t voxel_index = WORLD_TO_VOXEL(point);
-                        if(voxel_index < 0 || voxel_index >= NUM_VOXELS)
-                        {
-                            // NOTE(istarnion): This is a bug. Please fix.
-                            printf("WARNING: Point (%f, %f, %f) was transformed to voxel index %d\n",
-                                   point.x, point.y, point.z, voxel_index);
-                            continue;
-                        }
-
-                        Voxel *v = &magic_motion.voxels[voxel_index];
-
-                        // Add the current points color into the running average
-                        v->color.r = (uint8_t)((color.r + v->point_count * v->color.r) /
-                                               (v->point_count+1));
-                        v->color.g = (uint8_t)((color.g + v->point_count * v->color.g) /
-                                               (v->point_count+1));
-                        v->color.b = (uint8_t)((color.b + v->point_count * v->color.b) /
-                                               (v->point_count+1));
-
-                        ++v->point_count;
-                    }
-
                     // Add to point clouds
                     unsigned int index = magic_motion.cloud_size++;
                     magic_motion.spatial_cloud[index] = point;
@@ -607,7 +564,83 @@ MagicMotion_CaptureFrame(void)
                 }
             }
         }
+
+        EndTimingAndPrint(&timing, "Cloud computation");
     }
+
+    Timinginfo timing = StartTiming();
+
+    for(size_t i=0; i<magic_motion.cloud_size; ++i)
+    {
+        V3 point = magic_motion.spatial_cloud[i];
+        ColorPixel color = magic_motion.color_cloud[i];
+        int tag = (int)magic_motion.tag_cloud[i];
+
+        // Check if the point is within the voxel grid
+        if(fabs(point.x) < BOUNDING_BOX_X/2.0f &&
+           fabs(point.y) < BOUNDING_BOX_Y/2.0f &&
+           fabs(point.z) < BOUNDING_BOX_Z/2.0f)
+        {
+            // Determine if the point is background or foreground
+            if(classifier3D == CLASSIFIER_3D_NONE && classifier2D == CLASSIFIER_2D_NONE)
+            {
+                // If we are not using any classifiers, we just set every tag to foreground.
+                // Some applications don't use MM for background subtraction, and shouldn't
+                // have to pay for it.
+                tag |= TAG_FOREGROUND;
+            }
+            else
+            {
+                #if 1
+                float background_probability = _TrilinearlyInterpolate(point, magic_motion.background_model);
+                #else
+                // Skip trilinear interpolation, and use nearest voxel instead:
+                float background_probability = magic_motion.background_data.background[voxel_index];
+                #endif
+
+                /* mask is computed per point, but we don't store it in a "cloud",
+                 * as it is quite useless on its own. we _could_ store a temp cloud
+                 * on the stack so we can use this again.
+                const float mix = 0.2f; // 0 is only background model, 1 is only sensor mask
+                background_probability = LERP(background_probability, (1.0f - mask), mix);
+                */
+
+                if(background_probability < BACKGROUND_PROBABILITY_TRESHOLD ||
+                   magic_motion.classifier_thread_3D.is_calibrating)
+                {
+                    tag |= TAG_FOREGROUND;
+                }
+                else
+                {
+                    tag |= TAG_BACKGROUND;
+                }
+            }
+
+            uint32_t voxel_index = WORLD_TO_VOXEL(point);
+            if(voxel_index < 0 || voxel_index >= NUM_VOXELS)
+            {
+                // NOTE(istarnion): I think this bug is fixed. Do some testing,
+                // and replace this with an assert
+                printf("WARNING: Point (%f, %f, %f) was transformed to voxel index %d\n",
+                       point.x, point.y, point.z, voxel_index);
+                continue;
+            }
+
+            Voxel *v = &magic_motion.voxels[voxel_index];
+
+            // Add the current points color into the running average
+            v->color.r = (uint8_t)((color.r + v->point_count * v->color.r) /
+                                   (v->point_count+1));
+            v->color.g = (uint8_t)((color.g + v->point_count * v->color.g) /
+                                   (v->point_count+1));
+            v->color.b = (uint8_t)((color.b + v->point_count * v->color.b) /
+                                   (v->point_count+1));
+
+            ++v->point_count;
+        }
+    }
+
+    EndTimingAndPrint(&timing, "Voxel computation");
 
     // The naive classifier needs some help with noise
     if(classifier3D == CLASSIFIER_3D_CALIBRATION_NAIVE)

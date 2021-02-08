@@ -7,6 +7,9 @@
 #define STBI_ONLY_PNG
 #include "stb_image.h"
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 char *
 LoadTextFile(const char *filename)
 {
@@ -45,5 +48,11 @@ FreeImage(Image *img)
 {
     stbi_image_free(img->pixels);
     img->pixels = NULL;
+}
+
+void
+WriteImage(Image *img, const char *filename)
+{
+    stbi_write_png(filename, img->width, img->height, 4, img->pixels, 0);
 }
 

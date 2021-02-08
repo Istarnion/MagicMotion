@@ -351,6 +351,66 @@ namespace viewer
             ImGui::Image(sensor_preview, ImVec2(width, height));
             ImGui::Text("(%d x %d)", width, height);
 
+            if(ImGui::Button("Save component textures"))
+            {
+                int color_width, color_height;
+                MagicMotion_GetColorImageResolution(UI.camera_index, &color_width, &color_height);
+                int num_color_pixels = color_width * color_height;
+                uint32_t *color_pixel_buffer = (uint32_t *)malloc(num_color_pixels * 4);
+
+                Image color_image;
+                color_image.pixels = color_pixel_buffer;
+                color_image.width = color_width;
+                color_image.height = color_height;
+
+                const ColorPixel *colors = MagicMotion_GetColorImage(UI.camera_index);
+
+                for(int i=0; i<num_color_pixels; ++i)
+                {
+                    color_pixel_buffer[i] = (colors[i].r) | 0xFF000000;
+                }
+
+                WriteImage(&color_image, "capture_red.png");
+
+                for(int i=0; i<num_color_pixels; ++i)
+                {
+                    color_pixel_buffer[i] = (colors[i].g << 8) | 0xFF000000;
+                }
+
+                WriteImage(&color_image, "capture_green.png");
+
+                for(int i=0; i<num_color_pixels; ++i)
+                {
+                    color_pixel_buffer[i] = (colors[i].b << 16) | 0xFF000000;
+                }
+
+                WriteImage(&color_image, "capture_blue.png");
+
+                free(color_pixel_buffer);
+
+                int depth_width, depth_height;
+                MagicMotion_GetDepthImageResolution(UI.camera_index, &depth_width, &depth_height);
+                int num_depth_pixels = depth_width * depth_height;
+                uint32_t *depth_pixel_buffer = (uint32_t *)malloc(num_depth_pixels * 4);
+
+                Image depth_image;
+                depth_image.pixels = depth_pixel_buffer;
+                depth_image.width = depth_width;
+                depth_image.height = depth_height;
+
+                const float *depths = MagicMotion_GetDepthImage(UI.camera_index);
+
+                for(int i=0; i<num_depth_pixels; ++i)
+                {
+                    float normalized_depth = depths[i] / 5000.0f;
+                    uint8_t d = (uint8_t)((uint32_t)(normalized_depth * 255.0f) & 0xFF);
+                    depth_pixel_buffer[i] = 0xFF000000 | (d << 16) | (d << 8) | d;
+                }
+
+                WriteImage(&depth_image, "capture_depth.png");
+                free(depth_pixel_buffer);
+            }
+
             ImGui::End();
         }
 

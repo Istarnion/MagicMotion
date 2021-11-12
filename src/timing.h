@@ -1,7 +1,7 @@
 #ifndef TIMING_H_
 #define TIMING_H_
 
-// TODO(istarnion): Support ARM, and check if x86intrin.h works on GCC as well?
+// TODO(istarnion): Support ARM with an alternative to __rdtscp
 
 #include <stdint.h>
 #include <time.h>
@@ -26,8 +26,7 @@ GetTimestamp(void)
 static inline uint64_t
 GetClockCycleCount(void)
 {
-    unsigned int dummy;
-    uint64_t result = __rdtscp(&dummy);
+    uint64_t result = __rdtsc();
     return result;
 }
 
@@ -75,10 +74,7 @@ typedef struct
 static LoopedAverageTimerinfo
 StartLoopedaverageTiming(void)
 {
-    LoopedAverageTimerinfo result = (LoopedAverageTimerinfo){
-        0
-    };
-
+    LoopedAverageTimerinfo result = { 0 };
     return result;
 }
 

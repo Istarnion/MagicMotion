@@ -8,7 +8,7 @@ else
 endif
 
 HAS_OPENCV=false
-HAS_OPENNI=false
+HAS_OPENNI=true
 
 SCENE=SCENE_VIEWER # For viewing real time data from cameras, or recordings
 #SCENE=SCENE_INSPECTOR # For stepping through cloud recordings, and manually correcting them

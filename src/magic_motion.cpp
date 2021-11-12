@@ -58,7 +58,7 @@ enum Classifier2D
     CLASSIFIER_2D_OPENCV
 };
 
-static const Classifier3D classifier3D = CLASSIFIER_3D_NONE;
+static const Classifier3D classifier3D = CLASSIFIER_3D_CALIBRATION_NAIVE;
 static const Classifier2D classifier2D = CLASSIFIER_2D_NONE;
 
 struct ClassifierData3D
@@ -96,7 +96,7 @@ static struct
     unsigned int frame_count;    // The frame count increments at every call to CaptureFrame
 
     V3 *spatial_cloud;           // XYZ components of the point cloud
-    ColorPixel *color_cloud;          // RGB components of the point cloud
+    ColorPixel *color_cloud;     // RGB components of the point cloud
     MagicMotionTag *tag_cloud;   // 32 bit tags for each point in the cloud
     unsigned int cloud_size;     // The number of points currently in the cloud
     unsigned int cloud_capacity; // The maximum number of points in the cloud

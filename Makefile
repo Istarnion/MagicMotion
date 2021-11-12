@@ -60,13 +60,14 @@ magicmotion_server: server/server.cpp ${MAGICMOTION}
 	${CC} ${CFLAGS} server/server.cpp -o $@ ${LIBS}
 
 
-
-${MAGICMOTION}: $(shell find src -type f) ${MAGICMOTION_PATH}/${MAGICMOTION}
+${MAGICMOTION_PATH}/${MAGICMOTION}: $(shell find src -type f)
 ifeq (${OS},macOS)
-	pushd macOS && xcodebuild && popd
+	pushd macOS && make && popd
 else
 	pushd linux && make -B && popd
 endif
+
+${MAGICMOTION}: ${MAGICMOTION_PATH}/${MAGICMOTION}
 	cp ${MAGICMOTION_PATH}/${MAGICMOTION} ./
 
 .PHONY: clean

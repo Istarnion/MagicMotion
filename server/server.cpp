@@ -19,9 +19,12 @@
 #include "magic_motion.h"
 
 #define PORT 16680
+#define WHITELIST_LENGTH 16
 
 static volatile bool global_running;
 
+/// Callback for when/if the process is
+/// interrupted (e.g. by SIGINT caused by <Ctrl+C>
 void
 InterruptHandler(int signal)
 {
@@ -49,6 +52,7 @@ VerifyPacketControl(const Packet *packet)
             packet->control[2] == 0xE);
 }
 
+/// Create a UDP socket for listening on incoming packets.
 static int
 CreateSocket(int port)
 {
@@ -77,6 +81,7 @@ CloseSocket(int socket_handle)
     close(socket_handle);
 }
 
+// Create a sockaddr_in struct from the IP address bytes and port number
 static inline sockaddr_in
 Address(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint16_t port)
 {
@@ -102,6 +107,9 @@ SendPacket(int socket_handle, void *packet, size_t packet_size, sockaddr_in addr
     assert(sent_bytes != packet_size);
 }
 
+/// Try to receive a packet. If there is no packet available from
+/// the network card, it does not block, but returns false.
+/// Else, packet gets filled and the function returns true.
 static bool
 ReceivePacket(int socket_handle, Packet *packet, sockaddr_in *from)
 {
@@ -114,7 +122,7 @@ ReceivePacket(int socket_handle, Packet *packet, sockaddr_in *from)
     return bytes_received > 0;
 }
 
-// Returns the number of points inside the AABB
+/// Returns the number of points inside the AABB
 static int
 CheckAABBAgainstVoxelGrid(Voxel *voxels, V3 min, V3 max)
 {
@@ -142,6 +150,43 @@ CheckAABBAgainstVoxelGrid(Voxel *voxels, V3 min, V3 max)
     return result;
 }
 
+/// Add address to the whitelist
+static inline void
+Whitelist(uint32_t *whitelist, const sockaddr_in *address)
+{
+    uint32_t ip = ntohl(address->sin_addr.s_addr);
+    for(int i=0; i<WHITELIST_LENGTH; ++i)
+    {
+        if(whitelist[i] == ip)
+        {
+            break;
+        }
+        else if(whitelist[i] == 0)
+        {
+            whitelist[i] = ip;
+            break;
+        }
+    }
+}
+
+/// Check if address is whitelisted
+static inline bool
+IsWhitelisted(const uint32_t *whitelist, const sockaddr_in *address)
+{
+    uint32_t ip = ntohl(address->sin_addr.s_addr);
+    bool result = false;
+    for(int i=0; i<WHITELIST_LENGTH; ++i)
+    {
+        if(whitelist[i] == ip)
+        {
+            result = true;
+            break;
+        }
+    }
+
+    return result;
+}
+
 int
 main(int num_args, char *args[])
 {
@@ -153,6 +198,8 @@ main(int num_args, char *args[])
 
     signal(SIGINT, InterruptHandler);
 
+    uint32_t whitelist[WHITELIST_LENGTH];
+
     global_running = true;
     while(global_running)
     {
@@ -161,42 +208,56 @@ main(int num_args, char *args[])
 
         Packet packet = {};
         sockaddr_in from = {};
-        if(ReceivePacket(socket, &packet, &from) &&
-           VerifyPacketControl(&packet))
+        while(ReceivePacket(socket, &packet, &from))
         {
-            if(packet.type == PACKET_PING)
+            if(VerifyPacketControl(&packet))
             {
-                // TODO(istarnion): Verify the key in packet.data
-                // and if it's OK, add from to a whitelist
-                Packet response = {};
-                response.type = PACKET_PING;
-                response.control[0] = 0xB;
-                response.control[1] = 0xA;
-                response.control[2] = 0xE;
+                if(packet.type == PACKET_PING)
+                {
+                    // TODO(istarnion): Verify the API key.
+                    // Or let the control bytes be enough verification.
+                    // This is mostly running on local machines where
+                    // the port in question is not open to outside connections,
+                    // so 'hacking' is not really an issue.
+                    // And also, what damage can they do with a small fixed-size
+                    // packet? (Other than a DDoS ofc)
+                    Whitelist(whitelist, &from);
 
-                SendPacket(socket, &packet, sizeof(Packet), from);
-            }
-            else if(packet.type == PACKET_QUERY)
-            {
-                // TODO(istarnion): Check from against a whitelist
+                    Packet response = {};
+                    response.type = PACKET_PING;
+                    response.control[0] = 0xB;
+                    response.control[1] = 0xA;
+                    response.control[2] = 0xE;
 
-                V3 *aabb = (V3 *)&packet.data;
-                V3 min = aabb[0];
-                V3 max = aabb[1];
-                bool collides = CheckAABBAgainstVoxelGrid(voxels, min, max);
+                    SendPacket(socket, &packet, sizeof(Packet), from);
+                }
+                else if(packet.type == PACKET_QUERY)
+                {
+                    if(IsWhitelisted(whitelist, &from))
+                    {
+                        V3 *aabb = (V3 *)&packet.data;
+                        V3 min = aabb[0];
+                        V3 max = aabb[1];
+                        bool collides = CheckAABBAgainstVoxelGrid(voxels, min, max);
 
-                Packet response = {};
-                response.type = PACKET_QUERY;
-                response.control[0] = 0xB;
-                response.control[1] = 0xA;
-                response.control[2] = 0xE;
+                        Packet response = {};
+                        response.type = PACKET_QUERY;
+                        response.control[0] = 0xB;
+                        response.control[1] = 0xA;
+                        response.control[2] = 0xE;
 
-                // TODO(istarnion): Figure out what to put in data
-                SendPacket(socket, &packet, sizeof(Packet), from);
+                        // TODO(istarnion): Figure out what to put in data
+                        SendPacket(socket, &packet, sizeof(Packet), from);
+                    }
+                }
+                else
+                {
+                    fprintf(stderr, "Got packet with invalid type\n");
+                }
             }
             else
             {
-                fprintf(stderr, "Got packet with invalid type\n");
+                fprintf(stderr, "Incoming packet failed control\n");
             }
         }
     }

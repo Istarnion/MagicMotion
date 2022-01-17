@@ -43,13 +43,13 @@ struct PacketHeader
     uint16_t control;
     uint32_t sequence;
     uint8_t data;
-};
+} __attribute__((packed)) __attribute__((aligned(1)));
 
 struct PacketAABB
 {
     float min[3];
     float max[3];
-};
+} __attribute__((packed)) __attribute__((aligned(1)));
 
 static inline bool
 VerifyPacketControl(const PacketHeader *header)
@@ -101,13 +101,13 @@ Address(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint16_t port)
 }
 
 static void
-SendPacket(int socket_handle, void *packet, size_t packet_size, sockaddr_in address)
+SendPacket(int socket_handle, void *packet, size_t packet_size, sockaddr_in address, int flags)
 {
     // NOTE(istarnion): sendto cannto know if the packet is
     // _received_, only _sent_.
     int sent_bytes = sendto(socket_handle,
                             (const uint8_t *)packet, packet_size,
-                            0,
+                            flags,
                             (sockaddr *)&address, sizeof(sockaddr_in));
     assert(sent_bytes == packet_size);
 }
@@ -195,6 +195,7 @@ IsWhitelisted(const uint32_t *whitelist, const sockaddr_in *address)
 int
 main(int num_args, char *args[])
 {
+    printf("%lu\n", sizeof(PacketHeader));
     MagicMotion_Initialize();
     unsigned int num_cameras = MagicMotion_GetNumCameras();
     printf("Magic Motion initialized with %u camera(s)\n", num_cameras);
@@ -221,9 +222,10 @@ main(int num_args, char *args[])
             {
                 if(header.type == PACKET_PING)
                 {
+                    puts("Ping packet");
                     Whitelist(whitelist, &from);
                     // Return the PING packet
-                    SendPacket(socket, &header, sizeof(PacketHeader), from);
+                    SendPacket(socket, &header, sizeof(PacketHeader), from, MSG_CONFIRM);
                 }
                 else if(header.type == PACKET_QUERY)
                 {
@@ -232,6 +234,7 @@ main(int num_args, char *args[])
                         int num_aabbs = header.data;
                         if(ReceivePacket(socket, aabbs, sizeof(PacketAABB) * num_aabbs, &from))
                         {
+                            printf("Got %d AABBs\n", num_aabbs);
                             for(int i=0; i<num_aabbs; ++i)
                             {
                                 V3 min = {
@@ -250,14 +253,18 @@ main(int num_args, char *args[])
                                 results[i] = collides ? 1 : 0;
                             }
 
-                            SendPacket(socket, &header, sizeof(PacketHeader), from);
-                            SendPacket(socket, results, num_aabbs, from);
+                            SendPacket(socket, &header, sizeof(PacketHeader), from, MSG_MORE);
+                            SendPacket(socket, results, num_aabbs, from, MSG_CONFIRM);
                         }
                         else
                         {
                             header.data = 0;
-                            SendPacket(socket, &header, sizeof(PacketHeader), from);
+                            SendPacket(socket, &header, sizeof(PacketHeader), from, MSG_CONFIRM);
                         }
+                    }
+                    else
+                    {
+                        fprintf(stderr, "Got query packet from non-whitelisted IP\n");
                     }
                 }
                 else

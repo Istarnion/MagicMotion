@@ -36,6 +36,16 @@ typedef struct
     uint64_t clock;
 } Timinginfo;
 
+typedef struct
+{
+    uint64_t last_time;
+    double avg_time;
+    uint64_t last_clock;
+    double avg_clock;
+    int count;
+} LoopedAverageTimerinfo;
+
+#ifdef PROFILING
 static Timinginfo
 StartTiming(void)
 {
@@ -62,17 +72,8 @@ EndTimingAndPrint(const Timinginfo *info, const char *title)
     printf("%s: %lu cycles (%lu s, %lu ms, and %lu ns)\n", title, cycles, ss, ms, ns);
 }
 
-typedef struct
-{
-    uint64_t last_time;
-    double avg_time;
-    uint64_t last_clock;
-    double avg_clock;
-    int count;
-} LoopedAverageTimerinfo;
-
 static LoopedAverageTimerinfo
-StartLoopedaverageTiming(void)
+StartLoopedAverageTiming(void)
 {
     LoopedAverageTimerinfo result = { 0 };
     return result;
@@ -116,6 +117,14 @@ EndLoopedAverageTimingAndPrint(const LoopedAverageTimerinfo *info, const char *t
 
     printf("%s: %lu cycles (%lu s, %lu ms, and %lu ns)\n", title, cycles, ss, ms, ns);
 }
+#else
+#define StartTiming() {}
+#define EndTimingAndPrint(...)
+#define StartLoopedAverageTiming() {}
+#define StartLoopedAverageCapture(...)
+#define EndLoopedAverageCapture(...)
+#define EndLoopedAverageTimingAndPrint(...)
+#endif
 
 #endif /* end of include guard: TIMING_H_ */
 

@@ -66,6 +66,7 @@ namespace viewer
         bool sensor_view_open;
         int camera_index;
         int color_feed;
+        bool step_depth_image;
 
 #ifdef HAS_OPENCV
         bool opencv_view_open;
@@ -338,6 +339,11 @@ namespace viewer
                 for(int i=0; i<width*height; ++i)
                 {
                     float d = (*depths++) / 5000.0f;
+                    if(UI.step_depth_image)
+                    {
+                        d = floor(d / 100.0f) * 100.0f;
+                    }
+
                     uint8_t v = 255 * d;
                     uint32_t p = (v << 16) |
                                  (v << 8)  |

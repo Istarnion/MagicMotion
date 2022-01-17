@@ -37,19 +37,24 @@ enum PacketType : uint8_t
     PACKET_QUERY = 1
 };
 
-struct Packet
+struct PacketHeader
 {
     uint8_t type;
-    uint8_t control[3];
-    uint8_t data[4*6]; // Is "API key" for PING, or an AABB for QUERY
+    uint16_t control;
+    uint32_t sequence;
+    uint8_t data;
+};
+
+struct PacketAABB
+{
+    float min[3];
+    float max[3];
 };
 
 static inline bool
-VerifyPacketControl(const Packet *packet)
+VerifyPacketControl(const PacketHeader *header)
 {
-    return (packet->control[0] == 0xB &&
-            packet->control[1] == 0xA &&
-            packet->control[2] == 0xE);
+    return header->control == 0x69; // Nice
 }
 
 /// Create a UDP socket for listening on incoming packets.
@@ -104,22 +109,22 @@ SendPacket(int socket_handle, void *packet, size_t packet_size, sockaddr_in addr
                             (const uint8_t *)packet, packet_size,
                             0,
                             (sockaddr *)&address, sizeof(sockaddr_in));
-    assert(sent_bytes != packet_size);
+    assert(sent_bytes == packet_size);
 }
 
 /// Try to receive a packet. If there is no packet available from
 /// the network card, it does not block, but returns false.
 /// Else, packet gets filled and the function returns true.
 static bool
-ReceivePacket(int socket_handle, Packet *packet, sockaddr_in *from)
+ReceivePacket(int socket_handle, void *packet, size_t packet_length, sockaddr_in *from)
 {
     socklen_t from_size = sizeof(*from);
 
     int bytes_received = recvfrom(socket_handle,
-                                  (uint8_t *)packet, sizeof(Packet),
+                                  (uint8_t *)packet, packet_length,
                                   0, (sockaddr *)from, &from_size);
 
-    return bytes_received > 0;
+    return bytes_received == packet_length;
 }
 
 /// Returns the number of points inside the AABB
@@ -199,6 +204,8 @@ main(int num_args, char *args[])
     signal(SIGINT, InterruptHandler);
 
     uint32_t whitelist[WHITELIST_LENGTH];
+    PacketAABB aabbs[256];
+    uint8_t results[256];
 
     global_running = true;
     while(global_running)
@@ -206,48 +213,51 @@ main(int num_args, char *args[])
         MagicMotion_CaptureFrame();
         Voxel *voxels = MagicMotion_GetVoxels();
 
-        Packet packet = {};
+        PacketHeader header = {};
         sockaddr_in from = {};
-        while(ReceivePacket(socket, &packet, &from))
+        while(ReceivePacket(socket, &header, sizeof(PacketHeader), &from))
         {
-            if(VerifyPacketControl(&packet))
+            if(VerifyPacketControl(&header))
             {
-                if(packet.type == PACKET_PING)
+                if(header.type == PACKET_PING)
                 {
-                    // TODO(istarnion): Verify the API key.
-                    // Or let the control bytes be enough verification.
-                    // This is mostly running on local machines where
-                    // the port in question is not open to outside connections,
-                    // so 'hacking' is not really an issue.
-                    // And also, what damage can they do with a small fixed-size
-                    // packet? (Other than a DDoS ofc)
                     Whitelist(whitelist, &from);
-
-                    Packet response = {};
-                    response.type = PACKET_PING;
-                    response.control[0] = 0xB;
-                    response.control[1] = 0xA;
-                    response.control[2] = 0xE;
-
-                    SendPacket(socket, &packet, sizeof(Packet), from);
+                    // Return the PING packet
+                    SendPacket(socket, &header, sizeof(PacketHeader), from);
                 }
-                else if(packet.type == PACKET_QUERY)
+                else if(header.type == PACKET_QUERY)
                 {
                     if(IsWhitelisted(whitelist, &from))
                     {
-                        V3 *aabb = (V3 *)&packet.data;
-                        V3 min = aabb[0];
-                        V3 max = aabb[1];
-                        bool collides = CheckAABBAgainstVoxelGrid(voxels, min, max);
+                        int num_aabbs = header.data;
+                        if(ReceivePacket(socket, aabbs, sizeof(PacketAABB) * num_aabbs, &from))
+                        {
+                            for(int i=0; i<num_aabbs; ++i)
+                            {
+                                V3 min = {
+                                    aabbs[i].min[0],
+                                    aabbs[i].min[1],
+                                    aabbs[i].min[2]
+                                };
 
-                        Packet response = {};
-                        response.type = PACKET_QUERY;
-                        response.control[0] = 0xB;
-                        response.control[1] = 0xA;
-                        response.control[2] = 0xE;
+                                V3 max = {
+                                    aabbs[i].max[0],
+                                    aabbs[i].max[1],
+                                    aabbs[i].max[2]
+                                };
 
-                        // TODO(istarnion): Figure out what to put in data
-                        SendPacket(socket, &packet, sizeof(Packet), from);
+                                bool collides = CheckAABBAgainstVoxelGrid(voxels, min, max);
+                                results[i] = collides ? 1 : 0;
+                            }
+
+                            SendPacket(socket, &header, sizeof(PacketHeader), from);
+                            SendPacket(socket, results, num_aabbs, from);
+                        }
+                        else
+                        {
+                            header.data = 0;
+                            SendPacket(socket, &header, sizeof(PacketHeader), from);
+                        }
                     }
                 }
                 else

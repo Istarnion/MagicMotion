@@ -26,7 +26,7 @@ extern "C" {
 
 // Dimensions for the voxel space
 #define NUM_VOXELS_X 100
-#define NUM_VOXELS_Y 100
+#define NUM_VOXELS_Y  30
 #define NUM_VOXELS_Z 100
 
 #define BOUNDING_BOX_X (NUM_VOXELS_X * VOXEL_SIZE)

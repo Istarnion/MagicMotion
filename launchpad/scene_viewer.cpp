@@ -333,6 +333,7 @@ namespace viewer
             }
             else
             {
+                ImGui::Checkbox("Step Depth Image", &UI.step_depth_image);
                 MagicMotion_GetDepthImageResolution(UI.camera_index, &width, &height);
                 uint32_t pixels[width * height];
                 const float *depths = MagicMotion_GetDepthImage(UI.camera_index);

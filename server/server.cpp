@@ -253,7 +253,7 @@ main(int num_args, char *args[])
                                 results[i] = collides ? 1 : 0;
                             }
 
-                            SendPacket(socket, &header, sizeof(PacketHeader), from, MSG_MORE);
+                            SendPacket(socket, &header, sizeof(PacketHeader), from, MSG_CONFIRM);
                             SendPacket(socket, results, num_aabbs, from, MSG_CONFIRM);
                         }
                         else

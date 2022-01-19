@@ -58,7 +58,7 @@ enum Classifier2D
     CLASSIFIER_2D_OPENCV
 };
 
-static const Classifier3D classifier3D = CLASSIFIER_3D_CALIBRATION_NAIVE;
+static const Classifier3D classifier3D = CLASSIFIER_3D_NONE;
 static const Classifier2D classifier2D = CLASSIFIER_2D_NONE;
 
 struct ClassifierData3D
@@ -637,6 +637,10 @@ MagicMotion_CaptureFrame(void)
                                    (v->point_count+1));
 
             ++v->point_count;
+        }
+        else
+        {
+            tag |= TAG_BACKGROUND;
         }
     }
 

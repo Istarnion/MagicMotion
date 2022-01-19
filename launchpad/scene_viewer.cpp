@@ -342,7 +342,7 @@ namespace viewer
                     float d = (*depths++) / 5000.0f;
                     if(UI.step_depth_image)
                     {
-                        d = floor(d / 100.0f) * 100.0f;
+                        d = floorf(d / 10.0f) * 10.0f;
                     }
 
                     uint8_t v = 255 * d;
